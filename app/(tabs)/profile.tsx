@@ -1,0 +1,169 @@
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../../src/i18n/LanguageContext';
+import { useTheme } from '../../src/theme/ThemeContext';
+
+function SectionHeader({ label }: { label: string }) {
+  const theme = useTheme();
+  return (
+    <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+      {label}
+    </Text>
+  );
+}
+
+function Row({
+  icon,
+  label,
+  onPress,
+  chevron = true,
+}: {
+  icon: string;
+  label: string;
+  onPress?: () => void;
+  chevron?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          borderRadius: theme.radius.lg,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+    >
+      <Text style={styles.rowIcon}>{icon}</Text>
+      <Text style={[styles.rowLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
+      {chevron && (
+        <Text style={[styles.chevron, { color: theme.colors.textSecondary }]}>›</Text>
+      )}
+    </Pressable>
+  );
+}
+
+export default function ProfileScreen() {
+  const theme = useTheme();
+  const { t } = useLanguage();
+  const router = useRouter();
+
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: theme.colors.background }]}
+      edges={['top']}
+    >
+      {/* ── Fixed header bar ────────────────────────────────── */}
+      <View style={[styles.headerBar, { borderBottomColor: theme.colors.border }]}>
+        <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+          {t('tabs.profile')}
+        </Text>
+        <Pressable
+          onPress={() => router.push('/settings')}
+          hitSlop={10}
+          style={[styles.gearBtn, { backgroundColor: theme.colors.surfaceRaised }]}
+        >
+          <Text style={styles.gearIcon}>⚙️</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 120 }]} showsVerticalScrollIndicator={false}>
+        {/* ── Brand header ───────────────────────────────────── */}
+        <View style={styles.brand}>
+          <Text style={styles.brandIcon}>🎯</Text>
+          <Text style={[styles.brandName, { color: theme.colors.textPrimary }]}>
+            Momentum
+          </Text>
+          <Text style={[styles.brandTagline, { color: theme.colors.textSecondary }]}>
+            {t('profile.tagline')}
+          </Text>
+        </View>
+
+        {/* ── Habits ──────────────────────────────────────────── */}
+        <SectionHeader label={t('profile.habitsSection')} />
+        <Row
+          icon="📋"
+          label={t('profile.manageHabits')}
+          onPress={() => router.push('/habits')}
+        />
+        <Row
+          icon="✨"
+          label={t('profile.browseTemplates')}
+          onPress={() => router.push('/templates')}
+        />
+        <Row
+          icon="⚙️"
+          label={t('nav.settings')}
+          onPress={() => router.push('/settings')}
+        />
+
+        {/* ── About ───────────────────────────────────────────── */}
+        <SectionHeader label={t('profile.about')} />
+        <Row icon="📱" label={`${t('profile.version')} 1.0.0`} onPress={undefined} chevron={false} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+
+  // Fixed header bar (outside ScrollView)
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
+  gearBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gearIcon: { fontSize: 17 },
+
+  scroll: { paddingHorizontal: 20, paddingTop: 8 },
+
+  brand: { alignItems: 'center', paddingVertical: 24 },
+  brandIcon: { fontSize: 48, marginBottom: 8 },
+  brandName: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+  brandTagline: { fontSize: 13, marginTop: 4 },
+
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: 24,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+
+  card: {
+    borderWidth: 1.5,
+    padding: 14,
+  },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderWidth: 1.5,
+    marginBottom: 8,
+  },
+  rowIcon: { fontSize: 20 },
+  rowLabel: { flex: 1, fontSize: 15, fontWeight: '500' },
+  chevron: { fontSize: 20, fontWeight: '300' },
+});
