@@ -1,14 +1,13 @@
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { usePathname, useRouter } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -17,7 +16,6 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../theme/ThemeContext';
 
 // ─── Layout constants (keep in sync with useBottomNavHeight) ──────────────────
-const ACCENT = '#F05A7E';
 const PILL_H = 64;
 const FLOAT_GAP = 10;
 const H_PAD = 20;
@@ -34,7 +32,7 @@ const HL_H = PILL_H - HL_V_INSET * 2;
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
-function IconHome({ color, size = 22 }: { color: string; size?: number }) {
+function IconHome({ color, size = 28 }: { color: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -48,7 +46,7 @@ function IconHome({ color, size = 22 }: { color: string; size?: number }) {
   );
 }
 
-function IconPlus({ color = '#fff', size = 24 }: { color?: string; size?: number }) {
+function IconPlus({ color = '#fff', size = 30 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path d="M12 5V19" stroke={color} strokeWidth={2.5} strokeLinecap="round" />
@@ -57,7 +55,7 @@ function IconPlus({ color = '#fff', size = 24 }: { color?: string; size?: number
   );
 }
 
-function IconChart({ color, size = 22 }: { color: string; size?: number }) {
+function IconChart({ color, size = 28 }: { color: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Rect x="3" y="12" width="4" height="9" rx="1.5" fill={color} />
@@ -67,7 +65,7 @@ function IconChart({ color, size = 22 }: { color: string; size?: number }) {
   );
 }
 
-function IconPerson({ color, size = 22 }: { color: string; size?: number }) {
+function IconPerson({ color, size = 28 }: { color: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="12" cy="7" r="4" stroke={color} strokeWidth={1.8} />
@@ -85,7 +83,7 @@ function IconPerson({ color, size = 22 }: { color: string; size?: number }) {
 // Self-contained: uses expo-router hooks instead of React Navigation props,
 // rendered as a root-level absolute overlay (not inside the Tab navigator layout).
 export function BottomNav() {
-  const { t } = useLanguage();
+  const { isRTL } = useLanguage();
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -98,12 +96,15 @@ export function BottomNav() {
     pathname === '/profile' ? 2 : -1;
   const isOnToday = pathname === '/';
 
+  // In RTL flex layout slot 0 renders on the physical right, so mirror the x position
+  const slotLeft = (i: number) =>
+    isRTL
+      ? (2 - Math.max(i, 0)) * TAB_W + HL_H_INSET
+      : Math.max(i, 0) * TAB_W + HL_H_INSET;
+
   // ── Animations ──────────────────────────────────────────────────────────────
 
-  // Sliding dark highlight (for slots 1 & 2 when active)
-  const hlX = useRef(
-    new Animated.Value(Math.max(activeIndex, 0) * TAB_W + HL_H_INSET)
-  ).current;
+  const hlX = useRef(new Animated.Value(slotLeft(activeIndex))).current;
   const hlOpacity = useRef(
     new Animated.Value(activeIndex > 0 ? 1 : 0)
   ).current;
@@ -114,7 +115,7 @@ export function BottomNav() {
   useEffect(() => {
     Animated.parallel([
       Animated.spring(hlX, {
-        toValue: Math.max(activeIndex, 0) * TAB_W + HL_H_INSET,
+        toValue: slotLeft(activeIndex),
         useNativeDriver: false,
         damping: 20,
         stiffness: 260,
@@ -131,23 +132,19 @@ export function BottomNav() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [activeIndex, isOnToday]);
+  }, [activeIndex, isOnToday, isRTL]);
 
   // Derived morph values
   const homeOpacity = morphAnim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 0, 0] });
   const plusOpacity = morphAnim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0, 0, 1] });
   const homeScale  = morphAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] });
   const plusScale  = morphAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] });
-  // Slot-0 label fades away when showing +
-  const slot0LabelOpacity = morphAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0, 0] });
 
-  // ── Icon / label colours ────────────────────────────────────────────────────
-  // Slot 0 always sits on the pink background → always white
+  // ── Icon colours ────────────────────────────────────────────────────────────
   const DIM = 'rgba(255,255,255,0.55)';
-  const slot1Color = activeIndex === 1 ? ACCENT : DIM;
-  const slot2Color = activeIndex === 2 ? ACCENT : DIM;
-  const slot1LabelColor = activeIndex === 1 ? ACCENT : DIM;
-  const slot2LabelColor = activeIndex === 2 ? ACCENT : DIM;
+  const slot0Color = activeIndex === 0 ? '#fff' : DIM;
+  const slot1Color = activeIndex === 1 ? theme.colors.primary : DIM;
+  const slot2Color = activeIndex === 2 ? theme.colors.primary : DIM;
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const PATHS = ['/', '/progress', '/profile'] as const;
@@ -168,77 +165,56 @@ export function BottomNav() {
   };
 
   return (
-    // Absolutely positioned — floats over ALL screen content, clears safe area below pill
     <View style={[s.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {/* Shadow ring — separate from overflow:hidden pill so shadow renders */}
       <View style={s.shadow}>
-
-        {/* Pill: overflow:hidden so BlurView is clipped to rounded shape */}
         <View style={s.pill}>
 
-          {/* ── Glass background ─────────────────────────────── */}
           {Platform.OS === 'ios' ? (
             <BlurView tint="systemChromeMaterialDark" intensity={75} style={StyleSheet.absoluteFill} />
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,24,0.94)' }]} />
           )}
 
-          {/* Dark color wash on top of blur so pill reads as dark on both platforms */}
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,16,0.45)' }]} />
 
-          {/* ── Permanent pink capsule under slot 0 ──────────── */}
-          <View
-            pointerEvents="none"
-            style={[s.highlight, { left: HL_H_INSET, backgroundColor: ACCENT }]}
-          />
+          {/* Pink capsule under slot 0 — only when Home is active */}
+          {activeIndex === 0 && (
+            <View
+              pointerEvents="none"
+              style={[s.highlight, { left: slotLeft(0), backgroundColor: theme.colors.primary }]}
+            />
+          )}
 
-          {/* ── Sliding dark capsule for slots 1 & 2 ─────────── */}
+          {/* Sliding dark capsule for slots 1 & 2 */}
           <Animated.View
             pointerEvents="none"
-            style={[
-              s.highlight,
-              {
-                left: hlX,
-                backgroundColor: 'rgba(255,255,255,0.13)',
-                opacity: hlOpacity,
-              },
-            ]}
+            style={[s.highlight, { left: hlX, backgroundColor: 'rgba(255,255,255,0.13)', opacity: hlOpacity }]}
           />
 
-          {/* ── Slot 0: Today / Add ──────────────────────────── */}
+          {/* Slot 0: Home / Add */}
           <Pressable style={s.tab} onPress={pressFirst}>
-            {/* Morphing icon pair */}
             <View style={s.iconWrap}>
-              <Animated.View
-                style={[s.iconLayer, { opacity: homeOpacity, transform: [{ scale: homeScale }] }]}
-              >
-                <IconHome color="#fff" size={21} />
+              <Animated.View style={[s.iconLayer, { opacity: homeOpacity, transform: [{ scale: homeScale }] }]}>
+                <IconHome color={slot0Color} size={28} />
               </Animated.View>
-              <Animated.View
-                style={[s.iconLayer, { opacity: plusOpacity, transform: [{ scale: plusScale }] }]}
-              >
-                <IconPlus color="#fff" size={24} />
+              <Animated.View style={[s.iconLayer, { opacity: plusOpacity, transform: [{ scale: plusScale }] }]}>
+                <IconPlus color="#fff" size={30} />
               </Animated.View>
             </View>
-            <Animated.Text style={[s.label, { color: '#fff', opacity: slot0LabelOpacity }]}>
-              {t('tabs.today')}
-            </Animated.Text>
           </Pressable>
 
-          {/* ── Slot 1: Progress ─────────────────────────────── */}
+          {/* Slot 1: Progress */}
           <Pressable style={s.tab} onPress={() => pressSlot('/progress')}>
-            <IconChart color={slot1Color} size={22} />
-            <Text style={[s.label, { color: slot1LabelColor }]}>{t('tabs.progress')}</Text>
+            <IconChart color={slot1Color} size={28} />
           </Pressable>
 
-          {/* ── Slot 2: Profile ──────────────────────────────── */}
+          {/* Slot 2: Profile */}
           <Pressable style={s.tab} onPress={() => pressSlot('/profile')}>
-            <IconPerson color={slot2Color} size={22} />
-            <Text style={[s.label, { color: slot2LabelColor }]}>{t('tabs.profile')}</Text>
+            <IconPerson color={slot2Color} size={28} />
           </Pressable>
 
-        </View>{/* /pill */}
-      </View>{/* /shadow */}
+        </View>
+      </View>
     </View>
   );
 }
@@ -284,18 +260,15 @@ const s = StyleSheet.create({
     borderRadius: HL_H / 2,
   },
 
-  // Each of the 3 tab slots
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
   },
 
-  // Fixed-size icon container for smooth morph
   iconWrap: {
-    width: 26,
-    height: 26,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -307,11 +280,5 @@ const s = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  label: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.2,
   },
 });

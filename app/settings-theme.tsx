@@ -231,13 +231,15 @@ export default function ThemeScreen() {
               {/* Divider */}
               <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: theme.colors.border, marginHorizontal: 14 }} />
 
-              {/* Start Color row */}
-              <View style={[s.colorPickRow, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border }]}>
-                <View style={[s.iconBox, { backgroundColor: settings.customBgStart }]} />
-                <Text style={[s.rowLabel, { color: theme.colors.textPrimary, flex: 1 }]}>
-                  {t('settings.startColor')}
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              {/* Start Color section */}
+              <View style={[s.colorPickSection, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border }]}>
+                <View style={s.colorPickHeader}>
+                  <View style={[s.iconBox, { backgroundColor: settings.customBgStart }]} />
+                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>
+                    {t('settings.startColor')}
+                  </Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.colorDotsRow}>
                   {ACCENT_COLORS.map((c) => (
                     <Pressable
                       key={c}
@@ -252,13 +254,15 @@ export default function ThemeScreen() {
                 </ScrollView>
               </View>
 
-              {/* End Color row */}
-              <View style={s.colorPickRow}>
-                <View style={[s.iconBox, { backgroundColor: settings.customBgEnd }]} />
-                <Text style={[s.rowLabel, { color: theme.colors.textPrimary, flex: 1 }]}>
-                  {t('settings.endColor')}
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              {/* End Color section */}
+              <View style={s.colorPickSection}>
+                <View style={s.colorPickHeader}>
+                  <View style={[s.iconBox, { backgroundColor: settings.customBgEnd }]} />
+                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>
+                    {t('settings.endColor')}
+                  </Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.colorDotsRow}>
                   {ACCENT_COLORS.map((c) => (
                     <Pressable
                       key={c}
@@ -358,16 +362,20 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Color pick rows
-  colorPickRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Color pick sections (vertical layout: label row + scrollable dots)
+  colorPickSection: {
     paddingHorizontal: 14,
     paddingVertical: 10,
+    gap: 8,
+  },
+  colorPickHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
+  colorDotsRow: { gap: 8, alignItems: 'center' },
   iconBox: { width: 26, height: 26, borderRadius: 13 },
-  miniDot: { width: 22, height: 22, borderRadius: 11 },
+  miniDot: { width: 26, height: 26, borderRadius: 13 },
 
   // Preview section
   previewSection: {

@@ -97,11 +97,6 @@ export default function ProfileScreen() {
           label={t('profile.browseTemplates')}
           onPress={() => router.push('/templates')}
         />
-        <Row
-          icon="⚙️"
-          label={t('nav.settings')}
-          onPress={() => router.push('/settings')}
-        />
 
         {/* ── About ───────────────────────────────────────────── */}
         <SectionHeader label={t('profile.about')} />

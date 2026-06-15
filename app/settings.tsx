@@ -204,7 +204,7 @@ export default function SettingsScreen() {
             icon="◑"
             iconBg="#555"
             label={t('settings.appearanceMode')}
-            isLast={false}
+            isLast
             onPress={() => router.push('/settings-theme')}
             right={
               <View style={s.valueRight}>
@@ -214,13 +214,6 @@ export default function SettingsScreen() {
                 <Text style={[s.chevron, { color: theme.colors.textDisabled }]}>›</Text>
               </View>
             }
-          />
-          <SettingRow
-            icon="🎨"
-            iconBg="#9C27B0"
-            label={t('settings.theme')}
-            isLast
-            onPress={() => router.push('/settings-theme')}
           />
         </SectionCard>
 

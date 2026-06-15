@@ -22,7 +22,16 @@ import React, {
   useState,
 } from 'react';
 import { useColorScheme } from 'react-native';
+import { ACCENT_COLORS, useSettingsStore } from '../store/useSettingsStore';
 import { darkTokens, lightTokens, type ColorTokens } from './tokens';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 // ─── Non-color tokens (identical in both themes) ──────────────────────────────
 
@@ -66,6 +75,7 @@ export type Theme = {
   isDark: boolean;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => Promise<void>;
+  customBg: { enabled: boolean; start: string; end: string };
 };
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -80,6 +90,7 @@ const ThemeContext = createContext<Theme>({
   isDark: false,
   mode: 'system',
   setMode: async () => {},
+  customBg: { enabled: false, start: '#6C63FF', end: '#FF6584' },
 });
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -87,6 +98,12 @@ const ThemeContext = createContext<Theme>({
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useColorScheme(); // 'light' | 'dark' | null
   const [mode, setModeState] = useState<ThemeMode>('system');
+
+  // Read accent + custom background from the settings store
+  const accentColorIndex = useSettingsStore((s) => s.accentColorIndex);
+  const customBgEnabled  = useSettingsStore((s) => s.customBgEnabled);
+  const customBgStart    = useSettingsStore((s) => s.customBgStart);
+  const customBgEnd      = useSettingsStore((s) => s.customBgEnd);
 
   // Hydrate persisted preference on mount
   useEffect(() => {
@@ -107,11 +124,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const isDark =
     mode === 'system' ? systemScheme === 'dark' : mode === 'dark';
 
-  const colors = isDark ? darkTokens : lightTokens;
+  const accentColor = ACCENT_COLORS[accentColorIndex] ?? ACCENT_COLORS[0];
+
+  const colors: ColorTokens = {
+    ...(isDark ? darkTokens : lightTokens),
+    primary: accentColor,
+    primaryMuted: hexToRgba(accentColor, isDark ? 0.2 : 0.12),
+    // Let the root gradient show through every screen when custom bg is on
+    ...(customBgEnabled && { background: 'transparent' }),
+  };
+
+  const customBg = { enabled: customBgEnabled, start: customBgStart, end: customBgEnd };
 
   return (
     <ThemeContext.Provider
-      value={{ colors, spacing, radius, fontSize, isDark, mode, setMode }}
+      value={{ colors, spacing, radius, fontSize, isDark, mode, setMode, customBg }}
     >
       {children}
     </ThemeContext.Provider>
