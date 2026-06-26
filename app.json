@@ -1,14 +1,24 @@
 {
   "expo": {
-    "name": "Momentum",
+    "name": "Forge",
     "slug": "momentum",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "momentum",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/logo.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.momentum.app"
+      "bundleIdentifier": "com.momentum.app",
+      "icon": "./assets/logo.png",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Forge reads your Apple Health activity to automatically complete your habits like steps, sleep, water, and workouts.",
+        "NSHealthUpdateUsageDescription": "Forge updates your habit progress in Apple Health."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
+      }
     },
     "android": {
       "package": "com.momentum.app"
@@ -18,7 +28,16 @@
       "output": "static"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      ["react-native-health", { "isClinicalDataEnabled": false }],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#161311",
+          "resizeMode": "contain"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

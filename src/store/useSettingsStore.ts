@@ -31,7 +31,7 @@ export const GRADIENT_PRESETS: { start: string; end: string }[] = [
   { start: '#d4fc79', end: '#96e6a1' },
 ];
 
-export type WeekStart = 0 | 1; // 0 = Sunday, 1 = Monday
+export type WeekStart = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 1=Mon … 6=Sat
 
 type Settings = {
   accentColorIndex: number;
@@ -40,6 +40,7 @@ type Settings = {
   customBgEnd: string;
   customBgPresetIndex: number;
   weekStartsOn: WeekStart;
+  dayStartsAt: number; // minutes from midnight; 240 = 4:00 AM
   enableFutureDates: boolean;
   badgesEnabled: boolean;
   soundsEnabled: boolean;
@@ -54,6 +55,7 @@ const DEFAULTS: Settings = {
   customBgEnd: '#FF6584',
   customBgPresetIndex: 0,
   weekStartsOn: 1,
+  dayStartsAt: 240,
   enableFutureDates: false,
   badgesEnabled: true,
   soundsEnabled: true,
@@ -95,6 +97,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         customBgEnd: s.customBgEnd,
         customBgPresetIndex: s.customBgPresetIndex,
         weekStartsOn: s.weekStartsOn,
+        dayStartsAt: s.dayStartsAt,
         enableFutureDates: s.enableFutureDates,
         badgesEnabled: s.badgesEnabled,
         soundsEnabled: s.soundsEnabled,

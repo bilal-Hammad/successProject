@@ -1,9 +1,15 @@
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+
+// Keep the splash visible until the app is fully ready.
+// Must be called before any component renders.
+SplashScreen.preventAutoHideAsync();
 import { LanguageProvider, useLanguage } from '../src/i18n/LanguageContext';
 import { requestNotificationPermission } from '../src/notifications/reminders';
 import { useHabitStore } from '../src/store/useHabitStore';
+import { useMoodStore } from '../src/store/useMoodStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
@@ -41,13 +47,17 @@ export default function RootLayout() {
 function RootLayoutInner() {
   const hydrate = useHabitStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
+  const hydrateMoods = useMoodStore((s) => s.hydrate);
   const { t, isRTL } = useLanguage();
   const theme = useTheme();
 
   useEffect(() => {
-    hydrate();
-    hydrateSettings();
-    requestNotificationPermission();
+    async function prepare() {
+      await Promise.all([hydrate(), hydrateSettings(), hydrateMoods()]);
+      requestNotificationPermission(); // fire-and-forget
+      await SplashScreen.hideAsync();
+    }
+    prepare();
   }, []);
 
   return (
@@ -72,11 +82,11 @@ function RootLayoutInner() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="templates"
-          options={{ title: t('nav.templates'), headerBackTitle: t('nav.back') }}
+          options={{ headerShown: false, gestureEnabled: true }}
         />
         <Stack.Screen
           name="habit/new"
-          options={{ title: t('nav.newHabit'), presentation: 'modal' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="habits"

@@ -1,3 +1,13 @@
+export type HabitType = 'good' | 'bad' | 'track' | 'todo';
+
+export type MoodValue = 'awful' | 'bad' | 'poor' | 'neutral' | 'good' | 'great' | 'excellent';
+
+export interface MoodEntry {
+  date: string;       // "YYYY-MM-DD"
+  mood: MoodValue;    // legacy zone label — always set for backward compat
+  moodValue?: number; // 0–100 continuous value from new selector
+}
+
 export type Habit = {
   id: string;
   title: string;
@@ -13,6 +23,12 @@ export type Habit = {
   unit?: string;          // display unit for counting habits (e.g. "glasses", "min", "km")
   createdAt: number;
   archived: boolean;
+  description?: string;
+  habitType?: HabitType;
+  startDate?: string; // "YYYY-MM-DD"
+  endDate?: string;   // "YYYY-MM-DD"
+  step?: number;      // increment step for counting/todo habits (default 1)
+  healthKitType?: string;  // HealthKit identifier for auto-sync
 };
 
 export type Completion = {
@@ -49,6 +65,10 @@ export type HabitTemplate = {
   title: string;
   icon: string;
   color: string;
-  categories: string[]; // appears in every listed category tab
+  categories: string[];
   pointsPerCompletion: number;
+  habitType?: HabitType;
+  unit?: string;
+  defaultGoal?: number;
+  healthKitType?: string;
 };

@@ -8,16 +8,16 @@ import { useLanguage } from '../../src/i18n/LanguageContext';
 import { resolveHabitTitle } from '../../src/i18n/translations';
 import { getHabitCount, isHabitDone } from '../../src/logic/completion';
 import { pointsForDate, totalPoints } from '../../src/logic/points';
-import { habitsForDate } from '../../src/logic/scheduling';
+import { habitsForDate, todayString } from '../../src/logic/scheduling';
 import { currentStreak, longestStreak } from '../../src/logic/streaks';
 import { useHabitStore } from '../../src/store/useHabitStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useTheme } from '../../src/theme/ThemeContext';
 
-function getWeekDays(weekStartsOn: 0 | 1) {
+function getWeekDays(weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6) {
   const today = dayjs();
   const dow = today.day();
-  const daysFromStart = weekStartsOn === 1 ? (dow + 6) % 7 : dow;
+  const daysFromStart = (dow - weekStartsOn + 7) % 7;
   const startDay = today.subtract(daysFromStart, 'day');
   return Array.from({ length: 7 }, (_, i) => startDay.add(i, 'day'));
 }
@@ -26,12 +26,12 @@ export default function ProgressScreen() {
   const theme = useTheme();
   const { t } = useLanguage();
   const { habits, completions } = useHabitStore();
-  const { weekStartsOn } = useSettingsStore();
-  const today = dayjs().format('YYYY-MM-DD');
+  const { weekStartsOn, dayStartsAt } = useSettingsStore();
+  const today = todayString(dayStartsAt);
   const activeHabits = habits.filter((h) => !h.archived);
 
   const allPts = totalPoints(habits, completions);
-  const bestStreak = Math.max(0, ...habits.map((h) => currentStreak(h, completions)));
+  const bestStreak = Math.max(0, ...habits.map((h) => currentStreak(h, completions, weekStartsOn)));
 
   const last7 = Array.from({ length: 7 }, (_, i) =>
     dayjs().subtract(6 - i, 'day').format('YYYY-MM-DD')
@@ -178,8 +178,8 @@ export default function ProgressScreen() {
                 {t('progress.habitStreaks')}
               </Text>
               {activeHabits.map((habit) => {
-                const streak = currentStreak(habit, completions);
-                const longest = longestStreak(habit, completions);
+                const streak = currentStreak(habit, completions, weekStartsOn);
+                const longest = longestStreak(habit, completions, weekStartsOn);
                 return (
                   <View key={habit.id} style={[styles.habitRow, {
                     backgroundColor: theme.colors.surface,

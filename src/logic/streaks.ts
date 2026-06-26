@@ -1,15 +1,14 @@
 import dayjs from 'dayjs';
 import type { Completion, Habit } from '../models/types';
-import { getWeeklyCount, isHabitDone } from './completion';
+import type { WeekStart } from '../store/useSettingsStore';
+import { getWeekStart, getWeeklyCount, isHabitDone } from './completion';
 
-function getMondayOfWeek(date: string): string {
-  const d = dayjs(date);
-  const daysFromMonday = (d.day() + 6) % 7;
-  return d.subtract(daysFromMonday, 'day').format('YYYY-MM-DD');
-}
-
-export function currentStreak(habit: Habit, completions: Completion[]): number {
-  if (habit.weeklyTarget) return currentWeeklyStreak(habit, completions);
+export function currentStreak(
+  habit: Habit,
+  completions: Completion[],
+  weekStartsOn: WeekStart = 1,
+): number {
+  if (habit.weeklyTarget) return currentWeeklyStreak(habit, completions, weekStartsOn);
 
   let streak = 0;
   let cursor = dayjs().startOf('day');
@@ -40,21 +39,26 @@ export function currentStreak(habit: Habit, completions: Completion[]): number {
   return streak;
 }
 
-function currentWeeklyStreak(habit: Habit, completions: Completion[]): number {
-  const todayMonday = getMondayOfWeek(dayjs().format('YYYY-MM-DD'));
-  let weekMonday = dayjs(todayMonday);
+function currentWeeklyStreak(
+  habit: Habit,
+  completions: Completion[],
+  weekStartsOn: WeekStart,
+): number {
+  const todayStart = getWeekStart(weekStartsOn, dayjs().format('YYYY-MM-DD'));
+  const todayStartStr = todayStart.format('YYYY-MM-DD');
+  let weekStart = todayStart;
   let streak = 0;
 
   while (streak <= 52) {
-    const weekDate = weekMonday.format('YYYY-MM-DD');
-    const count = getWeeklyCount(habit.id, completions, weekDate);
-    const isCurrent = weekDate === todayMonday;
+    const weekDate = weekStart.format('YYYY-MM-DD');
+    const count = getWeeklyCount(habit.id, completions, weekDate, weekStartsOn);
+    const isCurrent = weekDate === todayStartStr;
 
     if (count >= habit.weeklyTarget!) {
       streak++;
-      weekMonday = weekMonday.subtract(7, 'day');
+      weekStart = weekStart.subtract(7, 'day');
     } else if (isCurrent) {
-      weekMonday = weekMonday.subtract(7, 'day');
+      weekStart = weekStart.subtract(7, 'day');
     } else {
       break;
     }
@@ -63,8 +67,12 @@ function currentWeeklyStreak(habit: Habit, completions: Completion[]): number {
   return streak;
 }
 
-export function longestStreak(habit: Habit, completions: Completion[]): number {
-  if (habit.weeklyTarget) return longestWeeklyStreak(habit, completions);
+export function longestStreak(
+  habit: Habit,
+  completions: Completion[],
+  weekStartsOn: WeekStart = 1,
+): number {
+  if (habit.weeklyTarget) return longestWeeklyStreak(habit, completions, weekStartsOn);
 
   const doneDates = completions
     .filter((c) => c.habitId === habit.id && isHabitDone(habit, completions, c.date))
@@ -73,7 +81,6 @@ export function longestStreak(habit: Habit, completions: Completion[]): number {
 
   if (doneDates.length === 0) return 0;
 
-  // Deduplicate (counting habits may have multiple records per day theoretically)
   const unique = [...new Set(doneDates)];
 
   let best = 1;
@@ -83,7 +90,6 @@ export function longestStreak(habit: Habit, completions: Completion[]): number {
     const prev = dayjs(unique[i - 1]);
     const curr = dayjs(unique[i]);
 
-    // Walk forward from prev+1 to find the next scheduled day
     let nextDay = prev.add(1, 'day');
     let steps = 0;
     while (!habit.scheduleDays.includes(nextDay.day()) && steps < 7) {
@@ -102,22 +108,25 @@ export function longestStreak(habit: Habit, completions: Completion[]): number {
   return best;
 }
 
-function longestWeeklyStreak(habit: Habit, completions: Completion[]): number {
+function longestWeeklyStreak(
+  habit: Habit,
+  completions: Completion[],
+  weekStartsOn: WeekStart,
+): number {
   const habitCompletions = completions.filter((c) => c.habitId === habit.id);
   if (habitCompletions.length === 0) return 0;
 
   const earliestDate = habitCompletions.map((c) => c.date).sort()[0];
-  const todayMonday = getMondayOfWeek(dayjs().format('YYYY-MM-DD'));
+  const todayStart = getWeekStart(weekStartsOn, dayjs().format('YYYY-MM-DD'));
 
-  let weekMonday = dayjs(getMondayOfWeek(earliestDate));
-  const endMonday = dayjs(todayMonday);
+  let weekStart = getWeekStart(weekStartsOn, earliestDate);
 
   let best = 0;
   let current = 0;
 
-  while (!weekMonday.isAfter(endMonday)) {
-    const weekDate = weekMonday.format('YYYY-MM-DD');
-    const count = getWeeklyCount(habit.id, completions, weekDate);
+  while (!weekStart.isAfter(todayStart)) {
+    const weekDate = weekStart.format('YYYY-MM-DD');
+    const count = getWeeklyCount(habit.id, completions, weekDate, weekStartsOn);
 
     if (count >= habit.weeklyTarget!) {
       current++;
@@ -126,7 +135,7 @@ function longestWeeklyStreak(habit: Habit, completions: Completion[]): number {
       current = 0;
     }
 
-    weekMonday = weekMonday.add(7, 'day');
+    weekStart = weekStart.add(7, 'day');
   }
 
   return best;

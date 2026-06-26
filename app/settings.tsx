@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import {
   Alert,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -20,11 +20,42 @@ import { useHabitStore } from '../src/store/useHabitStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import { useTheme } from '../src/theme/ThemeContext';
 
+// Lazy-load DateTimePicker so the app doesn't crash if the pod isn't installed yet.
+// After `npm install @react-native-community/datetimepicker && cd ios && pod install`,
+// the native spinner will be available.
+let DateTimePicker: React.ComponentType<any> | null = null;
+try {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+} catch {}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const LANG_OPTIONS = [
   { code: 'en' as const, label: 'English', flag: '🇬🇧' },
   { code: 'ar' as const, label: 'العربية', flag: '🇸🇦' },
   { code: 'tr' as const, label: 'Türkçe', flag: '🇹🇷' },
 ];
+
+const WEEK_DAY_NAMES = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+];
+
+// Common day-start times shown when native DateTimePicker is unavailable
+const FALLBACK_TIMES = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480];
+
+function minutesToDate(mins: number): Date {
+  const d = new Date();
+  d.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+  return d;
+}
+
+function dateToMinutes(d: Date): number {
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function formatDayStart(mins: number): string {
+  return dayjs().hour(Math.floor(mins / 60) % 24).minute(mins % 60).format('h:mm A');
+}
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
@@ -127,9 +158,23 @@ export default function SettingsScreen() {
   const { habits, completions } = useHabitStore();
   const settings = useSettingsStore();
   const insets = useSafeAreaInsets();
+
   const [langSheetVisible, setLangSheetVisible] = useState(false);
+  const [weekSheetVisible, setWeekSheetVisible] = useState(false);
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [tempTime, setTempTime] = useState<Date>(() => minutesToDate(settings.dayStartsAt));
 
   // ── Handlers ────────────────────────────────────────────────────────────────
+
+  const openDayPicker = () => {
+    setTempTime(minutesToDate(settings.dayStartsAt));
+    setDayPickerVisible(true);
+  };
+
+  const handleDayStartDone = () => {
+    settings.update({ dayStartsAt: dateToMinutes(tempTime) });
+    setDayPickerVisible(false);
+  };
 
   const handleExport = async () => {
     try {
@@ -191,7 +236,8 @@ export default function SettingsScreen() {
   };
 
   const langLabel = language === 'en' ? 'English' : language === 'ar' ? 'العربية' : 'Türkçe';
-  const weekLabel = settings.weekStartsOn === 0 ? t('settings.weekStartsSunday') : t('settings.weekStartsMonday');
+  const weekLabel = WEEK_DAY_NAMES[settings.weekStartsOn] ?? 'Monday';
+  const dayStartLabel = formatDayStart(settings.dayStartsAt);
 
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
@@ -238,11 +284,9 @@ export default function SettingsScreen() {
             icon="🕓"
             iconBg="#2196F3"
             label={t('settings.dayStartsAt')}
-            value="4:00 AM"
+            value={dayStartLabel}
             isLast={false}
-            onPress={() =>
-              Alert.alert(t('settings.dayStartsAt'), t('settings.comingSoonBody'))
-            }
+            onPress={openDayPicker}
           />
           <ValueRow
             icon="🌐"
@@ -258,9 +302,7 @@ export default function SettingsScreen() {
             label={t('settings.weekStartsOn')}
             value={weekLabel}
             isLast={false}
-            onPress={() =>
-              settings.update({ weekStartsOn: settings.weekStartsOn === 0 ? 1 : 0 })
-            }
+            onPress={() => setWeekSheetVisible(true)}
           />
           <SettingRow
             icon="📆"
@@ -400,6 +442,136 @@ export default function SettingsScreen() {
         <View style={{ height: 32 }} />
       </ScrollView>
 
+      {/* ── Day Starts At picker sheet ───────────────────────────────────── */}
+      <Modal
+        visible={dayPickerVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setDayPickerVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDayPickerVisible(false)} />
+          <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
+            {/* header row */}
+            <View style={[s.sheetHeader, { borderBottomColor: theme.colors.border }]}>
+              <Pressable onPress={() => setDayPickerVisible(false)} hitSlop={12} style={s.sheetActionBtn}>
+                <Text style={[s.sheetActionText, { color: theme.colors.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>
+                {t('settings.dayStartsAt')}
+              </Text>
+              <Pressable onPress={handleDayStartDone} hitSlop={12} style={s.sheetActionBtn}>
+                <Text style={[s.sheetActionText, { color: theme.colors.primary, fontWeight: '700' }]}>Done</Text>
+              </Pressable>
+            </View>
+
+            {/* Native spinner — available after npm install + pod install + rebuild */}
+            {DateTimePicker ? (
+              <DateTimePicker
+                value={tempTime}
+                mode="time"
+                display="spinner"
+                is24Hour={false}
+                locale="en_US"
+                onChange={(_: any, date?: Date) => { if (date) setTempTime(date); }}
+                style={{ backgroundColor: theme.colors.surface, height: 216 }}
+                textColor={theme.mode === 'dark' ? '#fff' : '#000'}
+              />
+            ) : (
+              // Fallback list when native picker not installed
+              <ScrollView style={{ maxHeight: 216 }} showsVerticalScrollIndicator={false}>
+                {FALLBACK_TIMES.map((mins) => {
+                  const active = settings.dayStartsAt === mins;
+                  const isLast = mins === FALLBACK_TIMES[FALLBACK_TIMES.length - 1];
+                  return (
+                    <Pressable
+                      key={mins}
+                      onPress={() => {
+                        settings.update({ dayStartsAt: mins });
+                        setDayPickerVisible(false);
+                      }}
+                      style={({ pressed }) => [
+                        s.langRow,
+                        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+                        { opacity: pressed ? 0.7 : 1 },
+                      ]}
+                    >
+                      <Text style={[s.langLabel, { color: theme.colors.textPrimary }]}>
+                        {formatDayStart(mins)}
+                      </Text>
+                      {active && (
+                        <View style={[s.radio, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]}>
+                          <Text style={s.radioCheck}>✓</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <View style={{ height: Math.max(insets.bottom, 20) }} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Week Starts On picker sheet ──────────────────────────────────── */}
+      <Modal
+        visible={weekSheetVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setWeekSheetVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setWeekSheetVisible(false)} />
+          <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
+            <View style={[s.sheetHeader, { borderBottomColor: theme.colors.border }]}>
+              <View style={{ width: 64 }} />
+              <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>
+                {t('settings.weekStartsOn')}
+              </Text>
+              <Pressable onPress={() => setWeekSheetVisible(false)} hitSlop={10} style={{ width: 64, alignItems: 'flex-end' }}>
+                <Text style={[s.sheetClose, { color: theme.colors.textSecondary }]}>✕</Text>
+              </Pressable>
+            </View>
+
+            {WEEK_DAY_NAMES.map((name, idx) => {
+              const active = settings.weekStartsOn === idx;
+              const isLast = idx === WEEK_DAY_NAMES.length - 1;
+              return (
+                <Pressable
+                  key={name}
+                  onPress={() => {
+                    settings.update({ weekStartsOn: idx as 0 | 1 | 2 | 3 | 4 | 5 | 6 });
+                    setWeekSheetVisible(false);
+                  }}
+                  style={({ pressed }) => [
+                    s.langRow,
+                    !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Text style={[s.langLabel, { color: theme.colors.textPrimary }]}>{name}</Text>
+                  <View style={[
+                    s.radio,
+                    {
+                      backgroundColor: active ? theme.colors.primary : 'transparent',
+                      borderColor: active ? theme.colors.primary : theme.colors.textDisabled,
+                    },
+                  ]}>
+                    {active && <Text style={s.radioCheck}>✓</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
+
+            <View style={{ height: Math.max(insets.bottom, 20) }} />
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Language picker bottom sheet ─────────────────────────────────── */}
       <Modal
         visible={langSheetVisible}
@@ -504,7 +676,7 @@ const s = StyleSheet.create({
   valueText: { fontSize: 14 },
   chevron: { fontSize: 20, fontWeight: '300', marginRight: -4 },
 
-  // ── Language bottom sheet
+  // ── Bottom sheets
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -526,6 +698,8 @@ const s = StyleSheet.create({
   },
   sheetTitle: { fontSize: 16, fontWeight: '700' },
   sheetClose: { fontSize: 17, fontWeight: '400', width: 32, textAlign: 'center' },
+  sheetActionBtn: { width: 64 },
+  sheetActionText: { fontSize: 15 },
   langRow: {
     flexDirection: 'row',
     alignItems: 'center',
