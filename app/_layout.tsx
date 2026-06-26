@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { AnimatedSplash } from '../src/components/AnimatedSplash';
 
 // Keep the splash visible until the app is fully ready.
 // Must be called before any component renders.
@@ -51,13 +52,32 @@ function RootLayoutInner() {
   const { t, isRTL } = useLanguage();
   const theme = useTheme();
 
+  const [hydrated, setHydrated] = useState(false);
+  const [splashVisible, setSplashVisible] = useState(true);
+
   useEffect(() => {
-    async function prepare() {
-      await Promise.all([hydrate(), hydrateSettings(), hydrateMoods()]);
-      requestNotificationPermission(); // fire-and-forget
-      await SplashScreen.hideAsync();
-    }
-    prepare();
+    // 3-second safety: splash always clears even if hydration hangs.
+    // AnimatedSplash also has its own SAFE_EXIT_MS guard.
+    const safety = setTimeout(() => {
+      setHydrated(true);
+      // Belt-and-suspenders: ensure native splash is gone even if
+      // AnimatedSplash never mounted (should not happen in practice).
+      SplashScreen.hideAsync().catch(() => {});
+    }, 3000);
+
+    Promise.all([hydrate(), hydrateSettings(), hydrateMoods()])
+      .then(() => {
+        clearTimeout(safety);
+        requestNotificationPermission();
+        setHydrated(true);
+      })
+      .catch(() => {
+        clearTimeout(safety);
+        setHydrated(true);
+        SplashScreen.hideAsync().catch(() => {});
+      });
+
+    return () => clearTimeout(safety);
   }, []);
 
   return (
@@ -125,6 +145,14 @@ function RootLayoutInner() {
           options={{ title: t('settings.comingSoon'), headerBackTitle: t('nav.back') }}
         />
       </Stack>
+
+      {/* Animated splash overlay — sits above the Stack, removed from tree when done */}
+      {splashVisible && (
+        <AnimatedSplash
+          ready={hydrated}
+          onHidden={() => setSplashVisible(false)}
+        />
+      )}
     </View>
   );
 }
