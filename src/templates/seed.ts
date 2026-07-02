@@ -1,32 +1,4 @@
-import type { HabitTemplate, TemplateCategory, TemplatePack } from '../models/types';
-
-// ─── Legacy pack data (kept so existing habits retain their templateId) ───────
-export const TEMPLATE_PACKS: TemplatePack[] = [
-  {
-    id: 'health',
-    name: 'Health Basics',
-    description: 'Simple daily health habits',
-    icon: '💧',
-    color: '#2196F3',
-    habits: [
-      { title: 'Drink 8 glasses of water', icon: '💧', color: '#2196F3', pointsPerCompletion: 10 },
-      { title: 'Take vitamins', icon: '💊', color: '#9C27B0', pointsPerCompletion: 10 },
-      { title: 'Sleep 8 hours', icon: '😴', color: '#3F51B5', pointsPerCompletion: 15 },
-    ],
-  },
-  {
-    id: 'fitness',
-    name: 'Fitness',
-    description: 'Move your body every day',
-    icon: '🏃',
-    color: '#FF5722',
-    habits: [
-      { title: 'Walk 10,000 steps', icon: '👟', color: '#FF5722', pointsPerCompletion: 20 },
-      { title: 'Stretch for 10 min', icon: '🧘', color: '#E91E63', pointsPerCompletion: 10 },
-      { title: 'Workout session', icon: '💪', color: '#F44336', pointsPerCompletion: 25 },
-    ],
-  },
-];
+import type { HabitTemplate, TemplateCategory } from '../models/types';
 
 // ─── Category tabs ────────────────────────────────────────────────────────────
 
@@ -57,6 +29,10 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
       'drink-tea', 'cook-home', 'vitamins', 'eat-breakfast', 'take-selfie',
       'wash-face', 'take-stairs', 'health-checkup', 'skin-care',
       'dental-checkup', 'face-mask', 'walk-dog',
+      'eat-fruits-veg', 'snack-fruits-veg', 'meal-prep', 'eat-low-fat',
+      'steam-boil', 'healthy-oils', 'low-fat-dairy', 'lean-meats',
+      'nutrition-labels', 'iodized-salt', 'food-log', 'no-salt-table',
+      'smaller-plates', 'dress-well',
     ],
   },
   {
@@ -74,6 +50,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
       'meditation', 'smile', 'wake-up-time', 'go-sleep-time',
       'gratitude', 'meet-friend', 'reflect-day', 'pray',
       'listen-music', 'journal-thoughts',
+      'breathe', 'laugh', 'mind-clearing', 'power-down-screens',
     ],
   },
   {
@@ -81,7 +58,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
     label: 'Productivity',
     templateIds: [
       'clean-email', 'plan-tomorrow', 'set-daily-goals', 'deep-work',
-      'make-your-bed', 'take-breaks',
+      'make-your-bed', 'take-breaks', 'no-phone', 'review-today', 'post-it-task',
     ],
   },
   {
@@ -96,8 +73,9 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
     id: 'other',
     label: 'Other',
     templateIds: [
-      'take-trash', 'laundry', 'track-expenses', 'walk-dog', 'water-plant',
+      'take-trash', 'laundry', 'track-expenses', 'water-plant',
       'clear-fridge', 'wash-dishes', 'vacuum', 'dust', 'mop-floor', 'cleaning',
+      'grocery-shopping', 'save-money', 'pay-bills', 'spend-less',
     ],
   },
   {
@@ -116,7 +94,11 @@ export const BAD_TAB_SECTIONS: { id: string; label: string; templateIds: string[
   {
     id: 'body',
     label: 'Body',
-    templateIds: ['dont-snack', 'dont-bite-nails', 'dont-pick-nose', 'sit-less'],
+    templateIds: [
+      'dont-snack', 'no-sugar', 'no-alcohol', 'dont-bite-nails', 'dont-pick-nose', 'sit-less',
+      'no-smoking', 'no-trans-fats', 'no-sugary-drinks', 'less-carbs',
+      'limit-salt', 'no-salty-snacks', 'no-late-meals',
+    ],
   },
   {
     id: 'mental-wellbeing',
@@ -126,7 +108,7 @@ export const BAD_TAB_SECTIONS: { id: string; label: string; templateIds: string[
   {
     id: 'productivity',
     label: 'Productivity',
-    templateIds: ['dont-procrastinate', 'dont-play-games', 'less-social-media'],
+    templateIds: ['dont-procrastinate', 'dont-play-games', 'less-social-media', 'less-tv'],
   },
 ];
 
@@ -218,7 +200,7 @@ export const HABIT_TEMPLATES: HabitTemplate[] = [
   { id: 'workout',       title: 'Workout',                 icon: '💪',  color: '#F44336', categories: ['good'],   pointsPerCompletion: 30, unit: 'minutes', defaultGoal: 30 },
   { id: 'exercise',      title: 'Exercise',                icon: '🏋️', color: '#E91E63', categories: ['good'],   pointsPerCompletion: 25, unit: 'minutes', defaultGoal: 30 },
   { id: 'yoga',          title: 'Yoga',                    icon: '🤸',  color: '#E91E63', categories: ['good'],   pointsPerCompletion: 20, unit: 'minutes', defaultGoal: 20 },
-  { id: 'stretch',       title: 'Stretch 10 min',          icon: '🧘',  color: '#FF9800', categories: ['good'],   pointsPerCompletion: 10, unit: 'minutes', defaultGoal: 10 },
+  { id: 'stretch',       title: 'Stretch 10 min',          icon: '🧘',  color: '#FF9800', categories: ['good', 'health'], pointsPerCompletion: 10, unit: 'minutes', defaultGoal: 10 },
   { id: 'meditation',    title: 'Meditate',                icon: '🧘',  color: '#9C27B0', categories: ['good'],   pointsPerCompletion: 15, unit: 'minutes', defaultGoal: 10 },
   { id: 'read-20',       title: 'Read 20 minutes',         icon: '📖',  color: '#4CAF50', categories: ['good'],   pointsPerCompletion: 15, unit: 'minutes', defaultGoal: 20 },
   { id: 'study-session', title: 'Study session',           icon: '📚',  color: '#2196F3', categories: ['good'],   pointsPerCompletion: 25, unit: 'minutes', defaultGoal: 45 },
@@ -230,6 +212,38 @@ export const HABIT_TEMPLATES: HabitTemplate[] = [
   { id: 'digital-detox', title: 'Digital detox hour',      icon: '🌿',  color: '#4CAF50', categories: ['good'],   pointsPerCompletion: 15 },
   { id: 'vocabulary',    title: 'Learn 5 new words',       icon: '🔤',  color: '#9C27B0', categories: ['good'],   pointsPerCompletion: 10 },
   { id: 'review-notes',  title: 'Review notes',            icon: '📝',  color: '#8BC34A', categories: ['good'],   pointsPerCompletion: 10 },
+  { id: 'no-phone',      title: 'No-phone Hour',           icon: '📵',  color: '#546E7A', categories: ['good'],   pointsPerCompletion: 15 },
+
+  // ── Good — Body (new) ────────────────────────────────────────────────────
+  { id: 'eat-fruits-veg',   title: 'Eat Fruits & Vegetables',          icon: '🍎', color: '#4CAF50', categories: ['good'], pointsPerCompletion: 15 },
+  { id: 'snack-fruits-veg', title: 'Snack on Raw Fruits & Vegetables', icon: '🍊', color: '#FF9800', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'meal-prep',        title: 'Meal-Prep Fruits & Vegetables',    icon: '🥗', color: '#43A047', categories: ['good'], pointsPerCompletion: 15 },
+  { id: 'eat-low-fat',      title: 'Eat Low-Fat / Reduce Saturated Fat', icon: '🥩', color: '#FF7043', categories: ['good'], pointsPerCompletion: 15 },
+  { id: 'steam-boil',       title: 'Steam or Boil Instead of Frying', icon: '🫕', color: '#26A69A', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'healthy-oils',     title: 'Replace Butter with Healthy Oils', icon: '🫒', color: '#FFA726', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'low-fat-dairy',    title: 'Choose Low-Fat Dairy',             icon: '🥛', color: '#29B6F6', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'lean-meats',       title: 'Choose Lean Meats / Trim Fat',     icon: '🍗', color: '#FF8A65', categories: ['good'], pointsPerCompletion: 15 },
+  { id: 'nutrition-labels', title: 'Check Nutrition Labels',           icon: '🏷️', color: '#607D8B', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'iodized-salt',     title: 'Use Iodized Salt',                 icon: '🧂', color: '#90A4AE', categories: ['good'], pointsPerCompletion: 5  },
+  { id: 'food-log',         title: 'Keep a Food Log',                  icon: '📓', color: '#5C6BC0', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'no-salt-table',    title: 'Keep Salt Off the Table',          icon: '🧂', color: '#78909C', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'smaller-plates',   title: 'Use Smaller Plates',               icon: '🍽️', color: '#AB47BC', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'dress-well',       title: 'Dress Well',                       icon: '👔', color: '#7E57C2', categories: ['good'], pointsPerCompletion: 10 },
+
+  // ── Good — Mental Wellbeing (new) ────────────────────────────────────────
+  { id: 'laugh',              title: 'Laugh Out Loud',                 icon: '😂', color: '#FFCA28', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'mind-clearing',      title: 'Mind Clearing',                  icon: '🌬️', color: '#26C6DA', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'power-down-screens', title: 'Power Down Screens Before Bed',  icon: '🌙', color: '#3F51B5', categories: ['good'], pointsPerCompletion: 10 },
+
+  // ── Good — Productivity (new) ────────────────────────────────────────────
+  { id: 'review-today',  title: 'Review Today',                        icon: '📋', color: '#FF7043', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'post-it-task',  title: 'Write Top Task on a Post-it',         icon: '📝', color: '#FFCA28', categories: ['good'], pointsPerCompletion: 5  },
+
+  // ── Good — Other (new) ───────────────────────────────────────────────────
+  { id: 'grocery-shopping', title: 'Grocery Shopping',                 icon: '🛒', color: '#4CAF50', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'save-money',       title: 'Save Money',                       icon: '💰', color: '#43A047', categories: ['good'], pointsPerCompletion: 15 },
+  { id: 'pay-bills',        title: 'Pay Bills',                        icon: '💳', color: '#FF7043', categories: ['good'], pointsPerCompletion: 10 },
+  { id: 'spend-less',       title: 'Spend Less Than You Earn',         icon: '💵', color: '#26A69A', categories: ['good'], pointsPerCompletion: 15 },
 
   // ── Health ────────────────────────────────────────────────────────────────
   { id: 'drink-water',   title: 'Drink Water',             icon: '💧',  color: '#2196F3', categories: ['health', 'good'], pointsPerCompletion: 10 },
@@ -244,9 +258,29 @@ export const HABIT_TEMPLATES: HabitTemplate[] = [
   { id: 'basketball',    title: 'Basketball',              icon: '🏀',  color: '#FF9800', categories: ['health'], pointsPerCompletion: 25 },
   { id: 'football',      title: 'Football',                icon: '⚽',  color: '#4CAF50', categories: ['health'], pointsPerCompletion: 25 },
   { id: 'active-cal',    title: 'Active Calorie',          icon: '🔥',  color: '#FF5722', categories: ['health'], pointsPerCompletion: 20 },
+  { id: 'burn-cal',      title: 'Burn Calorie',            icon: '🔥',  color: '#FF7043', categories: ['health'], pointsPerCompletion: 20 },
+
+  // ── Health — Manual (new) ────────────────────────────────────────────────
+  { id: 'aerobic-moderate',  title: 'Moderate-Intensity Aerobic Activity', icon: '🚶', color: '#FF5722', categories: ['health'], pointsPerCompletion: 20, unit: 'minutes', defaultGoal: 30 },
+  { id: 'aerobic-vigorous',  title: 'Vigorous-Intensity Aerobic Activity', icon: '🏃', color: '#F44336', categories: ['health'], pointsPerCompletion: 25, unit: 'minutes', defaultGoal: 20 },
+  { id: 'balance-training',  title: 'Balance & Functional Training',       icon: '⚖️', color: '#FF9800', categories: ['health'], pointsPerCompletion: 15, unit: 'minutes', defaultGoal: 20 },
+  { id: 'menstrual-log',     title: 'Log Menstrual Cycle',                 icon: '🌸', color: '#E91E63', categories: ['health'], pointsPerCompletion: 10 },
+  { id: 'contraceptive-pill',title: 'Take Contraceptive Pill',             icon: '💊', color: '#F48FB1', categories: ['health'], pointsPerCompletion: 10 },
+  { id: 'time-daylight',     title: 'Time in Daylight',                    icon: '☀️', color: '#FFA726', categories: ['health'], pointsPerCompletion: 15, unit: 'minutes', defaultGoal: 30 },
+  { id: 'pelvic-floor',      title: 'Pelvic Floor Training',               icon: '💪', color: '#EC407A', categories: ['health'], pointsPerCompletion: 15, unit: 'minutes', defaultGoal: 10 },
+  { id: 'sleep-diary',       title: 'Keep a Sleep Diary',                  icon: '📓', color: '#3F51B5', categories: ['health'], pointsPerCompletion: 10 },
 
   // ── Bad — Body ───────────────────────────────────────────────────────────
-  { id: 'dont-snack',        title: "Don't Snack",         icon: '🍿',  color: '#26A69A', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'dont-snack',        title: "Don't Snack",              icon: '🍿', color: '#26A69A', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'no-sugar',          title: 'No Sugar',                 icon: '🍬', color: '#EC407A', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'no-alcohol',        title: 'No Alcohol',               icon: '🍷', color: '#8D6E63', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 20 },
+  { id: 'no-smoking',        title: 'Quit Smoking / Vaping',    icon: '🚬', color: '#546E7A', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 25 },
+  { id: 'no-trans-fats',     title: 'Avoid Trans Fats',         icon: '🧈', color: '#FF8A65', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'no-sugary-drinks',  title: 'Cut Sugary Drinks',        icon: '🥤', color: '#FF7043', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 20 },
+  { id: 'less-carbs',        title: 'Less Carbohydrate',        icon: '🍞', color: '#FFA726', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'limit-salt',        title: 'Limit Salt (Under 5 g/day)', icon: '🧂', color: '#78909C', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'no-salty-snacks',   title: 'Restrict Salty Snacks',    icon: '🍟', color: '#FF9800', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
+  { id: 'no-late-meals',     title: 'Avoid Large Meals Before Bed', icon: '🌙', color: '#3F51B5', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
   { id: 'dont-bite-nails',   title: "Don't Bite Nails",    icon: '🤚',  color: '#00ACC1', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 10 },
   { id: 'dont-pick-nose',    title: "Don't Pick Nose",     icon: '👆',  color: '#1E88E5', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 10 },
   { id: 'sit-less',          title: 'Sit Less',            icon: '🪑',  color: '#8D6E63', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
@@ -260,6 +294,7 @@ export const HABIT_TEMPLATES: HabitTemplate[] = [
   { id: 'dont-procrastinate',title: "Don't Procrastinate", icon: '📺',  color: '#607D8B', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 20 },
   { id: 'dont-play-games',   title: "Don't Play Games",    icon: '🎮',  color: '#7B1FA2', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
   { id: 'less-social-media', title: 'Less Social Media',   icon: '📱',  color: '#455A64', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 20 },
+  { id: 'less-tv',           title: 'Less TV',             icon: '📺',  color: '#607D8B', categories: ['bad'], habitType: 'bad', pointsPerCompletion: 15 },
 
   // ── To-Do ─────────────────────────────────────────────────────────────────
   { id: 'file-taxes',        title: 'File Taxes',            icon: '🏦',  color: '#2196F3', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 20 },
@@ -274,4 +309,12 @@ export const HABIT_TEMPLATES: HabitTemplate[] = [
   { id: 'update-resume',     title: 'Update Resume',         icon: '📄',  color: '#2196F3', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 15 },
   { id: 'doctor-appt',       title: 'Book Doctor Appt.',     icon: '🏥',  color: '#00BCD4', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 10 },
   { id: 'clean-house',       title: 'Deep Clean House',      icon: '🏠',  color: '#4CAF50', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 20 },
+
+  // ── To-Do (new) ──────────────────────────────────────────────────────────
+  { id: 'renew-license',     title: "Renew Driver's License",       icon: '🪪', color: '#FF9800', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 10 },
+  { id: 'check-insurance',   title: 'Check Insurance',              icon: '📋', color: '#2196F3', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 10 },
+  { id: 'car-maintenance',   title: 'Car Maintenance',              icon: '🚗', color: '#607D8B', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 15 },
+  { id: 'automate-finances', title: 'Automate Your Finances',       icon: '🏦', color: '#4CAF50', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 15 },
+  { id: 'health-equipment',  title: 'Buy Health-Supporting Equipment', icon: '🏋️', color: '#FF5722', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 10 },
+  { id: 'optimize-bedroom',  title: 'Optimize Bedroom for Sleep',   icon: '🛏️', color: '#3F51B5', categories: ['todo'], habitType: 'todo', pointsPerCompletion: 15 },
 ];
