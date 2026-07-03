@@ -16,7 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { HabitTemplate } from '../src/models/types';
 import { readTodayValue, requestHealthKitPermission } from '../src/services/HealthKitService';
 import {
@@ -31,6 +31,7 @@ import { useTheme } from '../src/theme/ThemeContext';
 export default function TemplatesScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [selectedCategory, setSelectedCategory] = useState(TEMPLATE_CATEGORIES[0].id);
   const [search, setSearch] = useState('');
@@ -39,6 +40,7 @@ export default function TemplatesScreen() {
   const searchInputRef = useRef<TextInput>(null);
   const searchExpandAnim = useRef(new Animated.Value(0)).current;
   const createBtnOpacity = useRef(new Animated.Value(1)).current;
+  const createBtnSlide = useRef(new Animated.Value(0)).current;
   const lastScrollYRef = useRef(0);
 
   // ── Search header animation ───────────────────────────────────────────────
@@ -85,8 +87,10 @@ export default function TemplatesScreen() {
     lastScrollYRef.current = y;
     if (dy > 8) {
       Animated.timing(createBtnOpacity, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+      Animated.timing(createBtnSlide, { toValue: 1, duration: 180, useNativeDriver: true }).start();
     } else if (dy < -8) {
       Animated.timing(createBtnOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      Animated.timing(createBtnSlide, { toValue: 0, duration: 180, useNativeDriver: true }).start();
     }
   };
 
@@ -262,15 +266,10 @@ export default function TemplatesScreen() {
     </View>
   );
 
-  const createHabitFooter = (
-    <Animated.View style={[tl.createHabitWrap, { opacity: createBtnOpacity }]}>
-      <Pressable onPress={() => router.push('/habit/new')} hitSlop={12}>
-        <Text style={[tl.createHabitText, { color: theme.colors.textSecondary }]}>
-          Create Habit
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
+  const createBtnTransformY = createBtnSlide.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 100],
+  });
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -367,7 +366,6 @@ export default function TemplatesScreen() {
           scrollEventThrottle={16}
         >
           {goodSectionsWithData.map(renderGroupedSection)}
-          {createHabitFooter}
         </ScrollView>
 
       ) : isBadGrouped ? (
@@ -379,7 +377,6 @@ export default function TemplatesScreen() {
           scrollEventThrottle={16}
         >
           {badSectionsWithData.map(renderGroupedSection)}
-          {createHabitFooter}
         </ScrollView>
 
       ) : isHealthTab ? (
@@ -391,7 +388,6 @@ export default function TemplatesScreen() {
           scrollEventThrottle={16}
         >
           {APPLE_HEALTH_SECTIONS.map(renderHealthSection)}
-          {createHabitFooter}
         </ScrollView>
 
       ) : (
@@ -425,15 +421,40 @@ export default function TemplatesScreen() {
               }
               renderItem={({ item, index }) => renderFlatRow(item, index, flatFiltered.length)}
               ListFooterComponent={
-                <>
-                  <View style={[tl.cardBottom, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} />
-                  {createHabitFooter}
-                </>
+                <View style={[tl.cardBottom, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} />
               }
             />
           )}
         </>
       )}
+
+      {/* ── Floating "Custom Habit" button ── */}
+      <Animated.View
+        style={[
+          tl.floatingBtn,
+          {
+            opacity: createBtnOpacity,
+            transform: [{ translateY: createBtnTransformY }],
+            bottom: Math.max(insets.bottom, 8) + 120,
+          },
+        ]}
+      >
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/habit/new');
+          }}
+          style={[
+            tl.floatingBtnPress,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          <Text style={[tl.floatingBtnIcon]}>✨</Text>
+          <Text style={[tl.floatingBtnText, { color: theme.colors.primary }]}>
+            Custom Habit
+          </Text>
+        </Pressable>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -539,14 +560,30 @@ const tl = StyleSheet.create({
   rowChevron: { fontSize: 20 },
   sep: { height: StyleSheet.hairlineWidth },
 
-  // ── Create Habit footer ────────────────────────────────────────────────────
-  createHabitWrap: {
-    alignItems: 'center',
-    paddingVertical: 28,
+  // ── Floating "Custom Habit" button ────────────────────────────────────────
+  floatingBtn: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingHorizontal: 20,
   },
-  createHabitText: {
+  floatingBtnPress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  floatingBtnIcon: {
+    fontSize: 18,
+  },
+  floatingBtnText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
   // ── Empty search state ─────────────────────────────────────────────────────
