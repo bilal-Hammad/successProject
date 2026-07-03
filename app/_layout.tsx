@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Component, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
 
 class SplashErrorBoundary extends Component<{ children: ReactNode; onError: () => void }> {
@@ -48,11 +49,13 @@ function GradientBackground({ start, end }: { start: string; end: string }) {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <RootLayoutInner />
-      </LanguageProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <LanguageProvider>
+          <RootLayoutInner />
+        </LanguageProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
