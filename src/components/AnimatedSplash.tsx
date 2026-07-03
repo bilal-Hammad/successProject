@@ -23,8 +23,8 @@ const PADDING_TOP = SCREEN_H * 0.13;
 // Anvil metal bottom in SVG = SVG_SIZE * 730/1024 ≈ 185pt; empty space below = 75pt.
 const TEXT_PULL_UP = 75;
 
-const MIN_HOLD_MS = 700;   // minimum visible time before exit starts
-const SAFE_EXIT_MS = 3000; // hard cap — splash ALWAYS hides within 3s
+const MIN_HOLD_MS = 300;   // minimum visible time before exit starts
+const SAFE_EXIT_MS = 1500; // hard cap — splash ALWAYS hides within 1.5s
 
 interface Props {
   ready: boolean;     // true when app data loaded — triggers exit sequence
@@ -58,8 +58,10 @@ export function AnimatedSplash({ ready, onHidden }: Props) {
       duration: 360,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onHidden();
+    }).start(() => {
+      // Always call onHidden — even if animation was interrupted (finished=false)
+      // so the overlay is never permanently stuck on screen.
+      onHidden();
     });
   }
 
@@ -139,11 +141,11 @@ export function AnimatedSplash({ ready, onHidden }: Props) {
   }, []);
 
   return (
-    // Outer View: static backgroundColor (#161311). Not animated — backgroundColor
-    // is incompatible with useNativeDriver:true.
-    <View style={[StyleSheet.absoluteFill, styles.bg]}>
-      {/* Exit fade: only opacity animated (native driver) */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: exitOpacity }]}>
+    // Outer Animated.View handles exit opacity (native driver, opacity only — no bg).
+    // The background lives INSIDE so it fades with everything else and the app
+    // content underneath becomes visible when opacity reaches 0.
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: exitOpacity }]}>
+      <View style={[StyleSheet.absoluteFill, styles.bg]}>
         <View style={[styles.content, { paddingTop: PADDING_TOP }]}>
 
           {/* Anvil: outer = entrance (opacity + spring scale)
@@ -194,8 +196,8 @@ export function AnimatedSplash({ ready, onHidden }: Props) {
           </Animated.View>
 
         </View>
-      </Animated.View>
-    </View>
+      </View>
+    </Animated.View>
   );
 }
 

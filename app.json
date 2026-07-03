@@ -9,7 +9,7 @@
     "icon": "./assets/logo.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.momentum.app",
+      "bundleIdentifier": "com.bilalhammad.forge",
       "icon": "./assets/logo.png",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Forge reads your Apple Health activity to automatically complete your habits like steps, sleep, water, and workouts.",

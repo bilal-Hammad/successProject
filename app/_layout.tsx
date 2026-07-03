@@ -1,8 +1,19 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { Component, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
+
+class SplashErrorBoundary extends Component<{ children: ReactNode; onError: () => void }> {
+  componentDidCatch() {
+    SplashScreen.hideAsync().catch(() => {});
+    this.props.onError();
+  }
+  render() {
+    return this.props.children;
+  }
+}
 
 // Keep the splash visible until the app is fully ready.
 // Must be called before any component renders.
@@ -56,14 +67,12 @@ function RootLayoutInner() {
   const [splashVisible, setSplashVisible] = useState(true);
 
   useEffect(() => {
-    // 3-second safety: splash always clears even if hydration hangs.
+    // 1.5-second safety: splash always clears even if hydration hangs.
     // AnimatedSplash also has its own SAFE_EXIT_MS guard.
     const safety = setTimeout(() => {
       setHydrated(true);
-      // Belt-and-suspenders: ensure native splash is gone even if
-      // AnimatedSplash never mounted (should not happen in practice).
       SplashScreen.hideAsync().catch(() => {});
-    }, 3000);
+    }, 1500);
 
     Promise.all([hydrate(), hydrateSettings(), hydrateMoods()])
       .then(() => {
@@ -148,10 +157,12 @@ function RootLayoutInner() {
 
       {/* Animated splash overlay — sits above the Stack, removed from tree when done */}
       {splashVisible && (
-        <AnimatedSplash
-          ready={hydrated}
-          onHidden={() => setSplashVisible(false)}
-        />
+        <SplashErrorBoundary onError={() => setSplashVisible(false)}>
+          <AnimatedSplash
+            ready={hydrated}
+            onHidden={() => setSplashVisible(false)}
+          />
+        </SplashErrorBoundary>
       )}
     </View>
   );
