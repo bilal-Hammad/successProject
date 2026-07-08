@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
 import {
   Alert,
   Platform,
@@ -10,33 +9,33 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../src/i18n/LanguageContext';
 import { APPLE_HEALTH_SECTIONS, type HealthTemplate } from '../src/templates/healthTemplates';
 import { isHealthKitAvailable, readTodayValue, requestHealthKitPermission } from '../src/services/HealthKitService';
 
 export default function HealthTemplatesScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
+
+  const resolveTitle = (id: string, fallback: string) => {
+    const key = `habit.template.${id}`;
+    const val = t(key);
+    return val === key ? fallback : val;
+  };
 
   const handleSelect = async (template: HealthTemplate) => {
     if (Platform.OS === 'ios') {
       const result = await requestHealthKitPermission(template.healthKitType);
 
       if (!result.ok) {
-        // Show the actual error so it's debuggable — not a generic message
-        Alert.alert('Health Access', result.reason);
-        // Still navigate so the user can create the habit; sync just won't work yet
+        Alert.alert(t('templates.healthAccessTitle'), result.reason);
       } else {
-        // initHealthKit succeeded — the permission sheet was shown (or already granted).
-        // HealthKit never reveals read-permission status for privacy, so we do a
-        // quick read: if it returns data we're good; if 0, the user may have denied
-        // or there's simply no data recorded for today yet.
         const value = await readTodayValue(template.healthKitType);
         console.log(`[HealthKit] Post-init read for ${template.healthKitType}: ${value}`);
         if (value === 0) {
-          // Can't distinguish "denied" from "no data today" — show a soft hint
-          // but do NOT block navigation
           Alert.alert(
-            'Health Access',
-            'Permission sheet was shown. If your data doesn\'t appear, go to Settings > Health > Data Access & Devices > Momentum and enable access.',
+            t('templates.healthAccessTitle'),
+            t('templates.healthPermissionMsg'),
             [{ text: 'OK', style: 'default' }],
           );
         }
@@ -74,7 +73,7 @@ export default function HealthTemplatesScreen() {
       >
         {APPLE_HEALTH_SECTIONS.map((section) => (
           <View key={section.id}>
-            <Text style={ht.sectionLabel}>{section.label}</Text>
+            <Text style={ht.sectionLabel}>{t(section.labelKey)}</Text>
             <View style={ht.card}>
               {section.templates.map((tmpl, idx) => (
                 <View key={tmpl.id}>
@@ -85,7 +84,7 @@ export default function HealthTemplatesScreen() {
                     <View style={ht.iconWrap}>
                       <Text style={ht.iconEmoji}>{tmpl.emoji}</Text>
                     </View>
-                    <Text style={ht.rowLabel} numberOfLines={1}>{tmpl.title}</Text>
+                    <Text style={ht.rowLabel} numberOfLines={1}>{resolveTitle(tmpl.id, tmpl.title)}</Text>
                     <Text style={ht.chevron}>›</Text>
                   </Pressable>
                   {idx < section.templates.length - 1 && <View style={ht.sep} />}

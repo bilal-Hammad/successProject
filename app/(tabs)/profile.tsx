@@ -1,8 +1,10 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLanguage } from '../../src/i18n/LanguageContext';
+import { useAuthStore } from '../../src/store/useAuthStore';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 function SectionHeader({ label }: { label: string }) {
@@ -52,6 +54,30 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
+  const session = useAuthStore((s) => s.session);
+  const signInWithApple = useAuthStore((s) => s.signInWithApple);
+  const signOut = useAuthStore((s) => s.signOut);
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      if (e?.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Sign In Failed', e?.message ?? 'Something went wrong');
+      }
+    }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert(
+      t('profile.signOutConfirmTitle'),
+      t('profile.signOutConfirmMsg'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('profile.signOut'), style: 'destructive', onPress: () => signOut() },
+      ]
+    );
+  };
 
 
   return (
@@ -93,10 +119,64 @@ export default function ProfileScreen() {
           onPress={() => router.push('/habits')}
         />
         <Row
-          icon="✨"
-          label={t('profile.browseTemplates')}
-          onPress={() => router.push('/templates')}
+          icon="🗂️"
+          label={t('profile.editTemplates')}
+          onPress={() => router.push('/edit-templates')}
         />
+
+        {/* ── Account ─────────────────────────────────────────── */}
+        {Platform.OS === 'ios' && (
+          <>
+            <SectionHeader label={t('profile.account')} />
+            {session ? (
+              <>
+                <View
+                  style={[
+                    styles.row,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                      borderRadius: theme.radius.lg,
+                    },
+                  ]}
+                >
+                  <Text style={styles.rowIcon}>👤</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.rowLabel, { color: theme.colors.textPrimary }]}>
+                      {t('profile.signedInAs')}
+                    </Text>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }} numberOfLines={1}>
+                      {session.user.email ?? session.user.id.slice(0, 8)}
+                    </Text>
+                  </View>
+                </View>
+                <Row
+                  icon="🚪"
+                  label={t('profile.signOut')}
+                  onPress={handleSignOut}
+                  chevron={false}
+                />
+              </>
+            ) : (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={[styles.signInSubtitle, { color: theme.colors.textSecondary }]}>
+                  {t('profile.signInSubtitle')}
+                </Text>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={
+                    theme.colors.background === '#ffffff' || theme.colors.background === '#FFFFFF'
+                      ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                      : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  }
+                  cornerRadius={theme.radius.lg}
+                  style={styles.appleButton}
+                  onPress={handleSignIn}
+                />
+              </View>
+            )}
+          </>
+        )}
 
         {/* ── About ───────────────────────────────────────────── */}
         <SectionHeader label={t('profile.about')} />
@@ -161,4 +241,7 @@ const styles = StyleSheet.create({
   rowIcon: { fontSize: 20 },
   rowLabel: { flex: 1, fontSize: 15, fontWeight: '500' },
   chevron: { fontSize: 20, fontWeight: '300' },
+
+  signInSubtitle: { fontSize: 13, marginBottom: 12, paddingHorizontal: 4 },
+  appleButton: { height: 50, width: '100%' },
 });

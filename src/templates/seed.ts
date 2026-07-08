@@ -11,10 +11,10 @@ export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
 
 // ─── Good tab section definitions ────────────────────────────────────────────
 
-export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string[] }[] = [
+export const GOOD_TAB_SECTIONS: { id: string; labelKey: string; templateIds: string[] }[] = [
   {
     id: 'most-popular',
-    label: 'Most Popular',
+    labelKey: 'section.mostPopular',
     templateIds: [
       'make-your-bed', 'drink-water', 'cold-shower', 'vitamins',
       'wake-up-time', 'eat-healthy', 'brush-teeth', 'read-book',
@@ -23,7 +23,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'body',
-    label: 'Body',
+    labelKey: 'section.body',
     templateIds: [
       'eat-healthy', 'cold-shower', 'walk', 'brush-teeth', 'take-shower',
       'drink-tea', 'cook-home', 'vitamins', 'eat-breakfast', 'take-selfie',
@@ -37,7 +37,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'mind',
-    label: 'Mind',
+    labelKey: 'section.mind',
     templateIds: [
       'learn', 'read-book', 'play-instrument', 'learn-language',
       'homework-good', 'podcast', 'audiobook',
@@ -45,7 +45,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'mental-wellbeing',
-    label: 'Mental Wellbeing',
+    labelKey: 'section.mentalWellbeing',
     templateIds: [
       'meditation', 'smile', 'wake-up-time', 'go-sleep-time',
       'gratitude', 'meet-friend', 'reflect-day', 'pray',
@@ -55,7 +55,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'productivity',
-    label: 'Productivity',
+    labelKey: 'section.productivity',
     templateIds: [
       'clean-email', 'plan-tomorrow', 'set-daily-goals', 'deep-work',
       'make-your-bed', 'take-breaks', 'no-phone', 'review-today', 'post-it-task',
@@ -63,7 +63,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'social',
-    label: 'Social',
+    labelKey: 'section.social',
     templateIds: [
       'smile-stranger', 'give-compliment', 'leave-house', 'start-conversation',
       'give-hug', 'help-someone', 'call-parents',
@@ -71,7 +71,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'other',
-    label: 'Other',
+    labelKey: 'section.other',
     templateIds: [
       'take-trash', 'laundry', 'track-expenses', 'water-plant',
       'clear-fridge', 'wash-dishes', 'vacuum', 'dust', 'mop-floor', 'cleaning',
@@ -80,7 +80,7 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
   },
   {
     id: 'islamic',
-    label: 'Islamic',
+    labelKey: 'section.islamic',
     templateIds: [
       'five-prayers', 'read-quran', 'morning-adhkar', 'evening-adhkar',
       'istighfar', 'night-prayer', 'mon-thu-fast', 'daily-sadaqah', 'tasbih',
@@ -90,10 +90,10 @@ export const GOOD_TAB_SECTIONS: { id: string; label: string; templateIds: string
 
 // ─── Bad tab section definitions ─────────────────────────────────────────────
 
-export const BAD_TAB_SECTIONS: { id: string; label: string; templateIds: string[] }[] = [
+export const BAD_TAB_SECTIONS: { id: string; labelKey: string; templateIds: string[] }[] = [
   {
     id: 'body',
-    label: 'Body',
+    labelKey: 'section.body',
     templateIds: [
       'dont-snack', 'no-sugar', 'no-alcohol', 'dont-bite-nails', 'dont-pick-nose', 'sit-less',
       'no-smoking', 'no-trans-fats', 'no-sugary-drinks', 'less-carbs',
@@ -102,12 +102,12 @@ export const BAD_TAB_SECTIONS: { id: string; label: string; templateIds: string[
   },
   {
     id: 'mental-wellbeing',
-    label: 'Mental Wellbeing',
+    labelKey: 'section.mentalWellbeing',
     templateIds: ['dont-swear', 'dont-get-angry', 'dont-complain'],
   },
   {
     id: 'productivity',
-    label: 'Productivity',
+    labelKey: 'section.productivity',
     templateIds: ['dont-procrastinate', 'dont-play-games', 'less-social-media', 'less-tv'],
   },
 ];

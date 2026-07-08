@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -49,10 +49,15 @@ export function AnimatedSplash({ ready, onHidden }: Props) {
   const exitDoneRef = useRef(false);
   const breathRef   = useRef<Animated.CompositeAnimation | null>(null);
 
+  // Release pointer events the moment exit starts so the overlay never blocks
+  // the app — even if onHidden() is somehow delayed on Hermes production builds.
+  const [blocking, setBlocking] = useState(true);
+
   function triggerExit() {
     if (exitDoneRef.current) return;
     exitDoneRef.current = true;
     breathRef.current?.stop();
+    setBlocking(false);
     Animated.timing(exitOpacity, {
       toValue: 0,
       duration: 360,
@@ -144,7 +149,10 @@ export function AnimatedSplash({ ready, onHidden }: Props) {
     // Outer Animated.View handles exit opacity (native driver, opacity only — no bg).
     // The background lives INSIDE so it fades with everything else and the app
     // content underneath becomes visible when opacity reaches 0.
-    <Animated.View style={[StyleSheet.absoluteFill, { opacity: exitOpacity }]}>
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { opacity: exitOpacity }]}
+      pointerEvents={blocking ? 'auto' : 'none'}
+    >
       <View style={[StyleSheet.absoluteFill, styles.bg]}>
         <View style={[styles.content, { paddingTop: PADDING_TOP }]}>
 

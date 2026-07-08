@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -18,6 +18,11 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { HabitTemplate } from '../src/models/types';
+import { useLanguage } from '../src/i18n/LanguageContext';
+import {
+  useTemplateSectionStore,
+  type CustomSectionHabit,
+} from '../src/store/useTemplateSectionStore';
 import { readTodayValue, requestHealthKitPermission } from '../src/services/HealthKitService';
 import {
   BAD_TAB_SECTIONS,
@@ -32,16 +37,29 @@ export default function TemplatesScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   const [selectedCategory, setSelectedCategory] = useState(TEMPLATE_CATEGORIES[0].id);
   const [search, setSearch] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
+
+  const sectionOrder = useTemplateSectionStore(s => s.sectionOrder);
+  const hiddenSections = useTemplateSectionStore(s => s.hiddenSections);
+  const customSections = useTemplateSectionStore(s => s.customSections);
+  const getActiveSectionIds = useTemplateSectionStore(s => s.getActiveSectionIds);
 
   const searchInputRef = useRef<TextInput>(null);
   const searchExpandAnim = useRef(new Animated.Value(0)).current;
   const createBtnOpacity = useRef(new Animated.Value(1)).current;
   const createBtnSlide = useRef(new Animated.Value(0)).current;
   const lastScrollYRef = useRef(0);
+
+  // Resolve a translated title; fall back to the raw title if key not found
+  const resolveTitle = (id: string, fallback: string) => {
+    const key = `habit.template.${id}`;
+    const val = t(key);
+    return val === key ? fallback : val;
+  };
 
   // ── Search header animation ───────────────────────────────────────────────
 
@@ -96,16 +114,9 @@ export default function TemplatesScreen() {
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
-  const categoryLabel = (key: string) => {
-    const map: Record<string, string> = {
-      good: 'Good', health: 'Health', bad: 'Bad', todo: 'To-Do',
-    };
-    return map[key] ?? key;
-  };
-
   const templateById = useMemo(() => {
     const map: Record<string, HabitTemplate> = {};
-    for (const t of HABIT_TEMPLATES) map[t.id] = t;
+    for (const tmpl of HABIT_TEMPLATES) map[tmpl.id] = tmpl;
     return map;
   }, []);
 
@@ -113,8 +124,12 @@ export default function TemplatesScreen() {
     const cat = HABIT_TEMPLATES.filter((h) => h.categories.includes(selectedCategory));
     if (!search.trim()) return cat;
     const q = search.toLowerCase();
-    return cat.filter((h) => h.title.toLowerCase().includes(q));
-  }, [selectedCategory, search]);
+    return cat.filter((h) => {
+      const translated = resolveTitle(h.id, h.title);
+      return translated.toLowerCase().includes(q) || h.title.toLowerCase().includes(q);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, search, t]);
 
   const handleAdd = (template: HabitTemplate) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -132,29 +147,68 @@ export default function TemplatesScreen() {
     });
   };
 
-  // ── Grouped sections for Good tab ─────────────────────────────────────────
+  // ── Store-aware section data ───────────────────────────────────────────────
 
-  const goodSectionsWithData = useMemo(() => {
-    return GOOD_TAB_SECTIONS.map((section) => ({
-      ...section,
-      templates: section.templateIds
-        .map((id) => templateById[id])
-        .filter(Boolean) as HabitTemplate[],
-    })).filter((s) => s.templates.length > 0);
-  }, [templateById]);
+  type BuiltinSection = { kind: 'builtin'; id: string; labelKey: string; templates: HabitTemplate[] };
+  type CustomRenderSection = { kind: 'custom'; id: string; label: string; icon: string; habits: CustomSectionHabit[] };
+  type RenderSection = BuiltinSection | CustomRenderSection;
 
-  const badSectionsWithData = useMemo(() => {
-    return BAD_TAB_SECTIONS.map((section) => ({
-      ...section,
-      templates: section.templateIds
-        .map((id) => templateById[id])
-        .filter(Boolean) as HabitTemplate[],
-    })).filter((s) => s.templates.length > 0);
-  }, [templateById]);
+  function buildSections(cat: 'good' | 'bad'): RenderSection[] {
+    const result: RenderSection[] = [];
+    const source = cat === 'good' ? GOOD_TAB_SECTIONS : BAD_TAB_SECTIONS;
+    for (const id of getActiveSectionIds(cat)) {
+      const cs = customSections[id];
+      if (cs) { result.push({ kind: 'custom', id, label: cs.name, icon: cs.icon, habits: cs.habits }); continue; }
+      const s = source.find(x => x.id === id);
+      if (!s) continue;
+      const templates = s.templateIds.map(tid => templateById[tid]).filter((x): x is HabitTemplate => Boolean(x));
+      if (templates.length) result.push({ kind: 'builtin', id, labelKey: s.labelKey, templates });
+    }
+    return result;
+  }
+
+  const goodSectionsWithData = useMemo(
+    () => buildSections('good'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sectionOrder, hiddenSections, customSections, templateById],
+  );
+
+  const badSectionsWithData = useMemo(
+    () => buildSections('bad'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sectionOrder, hiddenSections, customSections, templateById],
+  );
+
+  type HealthRenderSection =
+    | { kind: 'builtin'; section: typeof APPLE_HEALTH_SECTIONS[0] }
+    | CustomRenderSection;
+
+  const activeHealthSections = useMemo((): HealthRenderSection[] => {
+    const result: HealthRenderSection[] = [];
+    for (const id of getActiveSectionIds('health')) {
+      const cs = customSections[id];
+      if (cs) { result.push({ kind: 'custom', id, label: cs.name, icon: cs.icon, habits: cs.habits }); continue; }
+      const s = APPLE_HEALTH_SECTIONS.find(x => x.id === id);
+      if (s) result.push({ kind: 'builtin', section: s });
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionOrder, hiddenSections, customSections]);
+
+  const todoCustomSections = useMemo((): CustomRenderSection[] => {
+    const result: CustomRenderSection[] = [];
+    for (const id of getActiveSectionIds('todo')) {
+      const cs = customSections[id];
+      if (cs) result.push({ kind: 'custom', id, label: cs.name, icon: cs.icon, habits: cs.habits });
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionOrder, hiddenSections, customSections]);
 
   const isGoodGrouped = selectedCategory === 'good' && !search.trim();
   const isBadGrouped  = selectedCategory === 'bad'  && !search.trim();
   const isHealthTab   = selectedCategory === 'health';
+  const isTodoGrouped = selectedCategory === 'todo'  && !search.trim();
 
   // ── HealthKit select handler (same flow as health-templates.tsx) ──────────
 
@@ -163,13 +217,13 @@ export default function TemplatesScreen() {
     if (Platform.OS === 'ios') {
       const result = await requestHealthKitPermission(template.healthKitType);
       if (!result.ok) {
-        Alert.alert('Health Access', result.reason);
+        Alert.alert(t('templates.healthAccessTitle'), result.reason);
       } else {
         const value = await readTodayValue(template.healthKitType);
         if (value === 0) {
           Alert.alert(
-            'Health Access',
-            "Permission sheet was shown. If your data doesn't appear, go to Settings > Health > Data Access & Devices > Momentum and enable access.",
+            t('templates.healthAccessTitle'),
+            t('templates.healthPermissionMsg'),
             [{ text: 'OK' }],
           );
         }
@@ -202,7 +256,7 @@ export default function TemplatesScreen() {
       >
         <Text style={tl.rowIcon}>{item.icon}</Text>
         <Text style={[tl.rowLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-          {item.title}
+          {resolveTitle(item.id, item.title)}
         </Text>
         <Text style={[tl.rowChevron, { color: theme.colors.textSecondary }]}>›</Text>
       </Pressable>
@@ -212,10 +266,24 @@ export default function TemplatesScreen() {
     </View>
   );
 
-  const renderGroupedSection = (section: typeof goodSectionsWithData[0]) => (
+  const handleAddCustomHabit = (habit: CustomSectionHabit) => {
+    router.push({
+      pathname: '/habit/new',
+      params: {
+        title: habit.title,
+        icon: habit.icon,
+        color: habit.color,
+        habitType: habit.habitType,
+        ...(habit.unit ? { unit: habit.unit } : {}),
+        ...(habit.defaultGoal ? { goal: String(habit.defaultGoal) } : {}),
+      },
+    });
+  };
+
+  const renderGroupedSection = (section: BuiltinSection) => (
     <View key={section.id}>
       <Text style={[tl.sectionHeader, { color: theme.colors.textSecondary }]}>
-        {section.label}
+        {t(section.labelKey)}
       </Text>
       <View style={[tl.groupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
         {section.templates.map((item, idx) => (
@@ -226,7 +294,7 @@ export default function TemplatesScreen() {
             >
               <Text style={tl.rowIcon}>{item.icon}</Text>
               <Text style={[tl.rowLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {item.title}
+                {resolveTitle(item.id, item.title)}
               </Text>
               <Text style={[tl.rowChevron, { color: theme.colors.textSecondary }]}>›</Text>
             </Pressable>
@@ -239,10 +307,45 @@ export default function TemplatesScreen() {
     </View>
   );
 
+  const renderCustomSection = (section: CustomRenderSection) => (
+    <View key={section.id}>
+      <Text style={[tl.sectionHeader, { color: theme.colors.textSecondary }]}>
+        {section.icon} {section.label}
+      </Text>
+      {section.habits.length > 0 ? (
+        <View style={[tl.groupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          {section.habits.map((habit, idx) => (
+            <View key={`${habit.title}-${idx}`}>
+              <Pressable
+                onPress={() => handleAddCustomHabit(habit)}
+                style={({ pressed }) => [tl.row, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={tl.rowIcon}>{habit.icon}</Text>
+                <Text style={[tl.rowLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {habit.title}
+                </Text>
+                <Text style={[tl.rowChevron, { color: theme.colors.textSecondary }]}>›</Text>
+              </Pressable>
+              {idx < section.habits.length - 1 && (
+                <View style={[tl.sep, { backgroundColor: theme.colors.border, marginLeft: 56 }]} />
+              )}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={[tl.groupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <Text style={[tl.row, { color: theme.colors.textSecondary, fontSize: 14 }]}>
+            {t('editSection.noHabits')}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
   const renderHealthSection = (section: typeof APPLE_HEALTH_SECTIONS[0]) => (
     <View key={section.id}>
       <Text style={[tl.sectionHeader, { color: theme.colors.textSecondary }]}>
-        {section.label}
+        {t(section.labelKey)}
       </Text>
       <View style={[tl.groupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
         {section.templates.map((tmpl, idx) => (
@@ -253,7 +356,7 @@ export default function TemplatesScreen() {
             >
               <Text style={tl.rowIcon}>{tmpl.emoji}</Text>
               <Text style={[tl.rowLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {tmpl.title}
+                {resolveTitle(tmpl.id, tmpl.title)}
               </Text>
               <Text style={[tl.rowChevron, { color: theme.colors.textSecondary }]}>›</Text>
             </Pressable>
@@ -287,7 +390,7 @@ export default function TemplatesScreen() {
           <Pressable onPress={() => router.back()} hitSlop={12} style={tl.hdrBackBtn}>
             <Text style={[tl.hdrBackText, { color: theme.colors.primary }]}>‹</Text>
           </Pressable>
-          <Text style={[tl.hdrTitle, { color: theme.colors.textPrimary }]}>Templates</Text>
+          <Text style={[tl.hdrTitle, { color: theme.colors.textPrimary }]}>{t('templates.title')}</Text>
           <Pressable onPress={openSearch} hitSlop={12} style={tl.hdrSearchBtn}>
             <Text style={tl.hdrSearchIcon}>🔍</Text>
           </Pressable>
@@ -307,14 +410,14 @@ export default function TemplatesScreen() {
             ref={searchInputRef}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search habits…"
+            placeholder={t('templates.searchPlaceholder')}
             placeholderTextColor={theme.colors.textSecondary}
             style={[tl.searchInput, { color: theme.colors.textPrimary }]}
             returnKeyType="search"
             clearButtonMode="while-editing"
           />
           <Pressable onPress={closeSearch} hitSlop={8} style={tl.cancelBtn}>
-            <Text style={[tl.cancelText, { color: theme.colors.primary }]}>Cancel</Text>
+            <Text style={[tl.cancelText, { color: theme.colors.primary }]}>{t('templates.cancel')}</Text>
           </Pressable>
         </Animated.View>
       </View>
@@ -350,7 +453,7 @@ export default function TemplatesScreen() {
                   fontWeight: active ? '700' : '500',
                 },
               ]}>
-                {categoryLabel(cat.id)}
+                {t(cat.labelKey)}
               </Text>
             </Pressable>
           );
@@ -365,7 +468,7 @@ export default function TemplatesScreen() {
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          {goodSectionsWithData.map(renderGroupedSection)}
+          {goodSectionsWithData.map(s => s.kind === 'builtin' ? renderGroupedSection(s) : renderCustomSection(s))}
         </ScrollView>
 
       ) : isBadGrouped ? (
@@ -376,28 +479,63 @@ export default function TemplatesScreen() {
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          {badSectionsWithData.map(renderGroupedSection)}
+          {badSectionsWithData.map(s => s.kind === 'builtin' ? renderGroupedSection(s) : renderCustomSection(s))}
         </ScrollView>
 
       ) : isHealthTab ? (
-        /* ── Health tab → HealthKit auto-sync templates ── */
+        /* ── Health tab → store-ordered sections + custom ── */
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 16 }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          {APPLE_HEALTH_SECTIONS.map(renderHealthSection)}
+          {activeHealthSections.map(s =>
+            s.kind === 'builtin' ? renderHealthSection(s.section) : renderCustomSection(s)
+          )}
+        </ScrollView>
+
+      ) : isTodoGrouped ? (
+        /* ── To-Do tab (grouped: custom sections + builtin flat) ── */
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {todoCustomSections.map(s => renderCustomSection(s))}
+          <Text style={[tl.sectionHeader, { color: theme.colors.textSecondary }]}>
+            {t('section.allTasks')}
+          </Text>
+          <View style={[tl.groupCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            {flatFiltered.map((item, idx) => (
+              <View key={item.id}>
+                <Pressable
+                  onPress={() => handleAdd(item)}
+                  style={({ pressed }) => [tl.row, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Text style={tl.rowIcon}>{item.icon}</Text>
+                  <Text style={[tl.rowLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                    {resolveTitle(item.id, item.title)}
+                  </Text>
+                  <Text style={[tl.rowChevron, { color: theme.colors.textSecondary }]}>›</Text>
+                </Pressable>
+                {idx < flatFiltered.length - 1 && (
+                  <View style={[tl.sep, { backgroundColor: theme.colors.border, marginLeft: 56 }]} />
+                )}
+              </View>
+            ))}
+          </View>
         </ScrollView>
 
       ) : (
-        /* ── To-Do tab + active search (flat list) ── */
+        /* ── Active search (flat list across current category) ── */
         <>
           {flatFiltered.length === 0 && search.trim() ? (
             <View style={tl.emptyState}>
               <Text style={{ fontSize: 40 }}>🔍</Text>
-              <Text style={[tl.emptyTitle, { color: theme.colors.textPrimary }]}>No habits found</Text>
-              <Text style={[tl.emptySub, { color: theme.colors.textSecondary }]}>Try a different search term</Text>
+              <Text style={[tl.emptyTitle, { color: theme.colors.textPrimary }]}>{t('templates.noHabitsFound')}</Text>
+              <Text style={[tl.emptySub, { color: theme.colors.textSecondary }]}>{t('templates.tryDifferentSearch')}</Text>
             </View>
           ) : (
             <FlatList
@@ -408,16 +546,7 @@ export default function TemplatesScreen() {
               onScroll={handleScroll}
               scrollEventThrottle={16}
               ListHeaderComponent={
-                !search.trim() ? (
-                  <View>
-                    <Text style={[tl.sectionHeader, { color: theme.colors.textSecondary }]}>
-                      {categoryLabel(selectedCategory)}
-                    </Text>
-                    <View style={[tl.cardTop, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} />
-                  </View>
-                ) : (
-                  <View style={[tl.cardTop, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} />
-                )
+                <View style={[tl.cardTop, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} />
               }
               renderItem={({ item, index }) => renderFlatRow(item, index, flatFiltered.length)}
               ListFooterComponent={
@@ -435,24 +564,22 @@ export default function TemplatesScreen() {
           {
             opacity: createBtnOpacity,
             transform: [{ translateY: createBtnTransformY }],
-            bottom: Math.max(insets.bottom, 8) + 120,
+            bottom: Math.max(insets.bottom, 16) + 16,
           },
         ]}
       >
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push('/habit/new');
+            const habitType =
+              selectedCategory === 'bad' ? 'bad' :
+              selectedCategory === 'todo' ? 'todo' :
+              selectedCategory === 'health' ? 'track' : 'good';
+            router.push({ pathname: '/habit/new', params: { habitType } });
           }}
-          style={[
-            tl.floatingBtnPress,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-          ]}
+          style={[tl.floatingBtnPress, { backgroundColor: theme.colors.primary }]}
         >
-          <Text style={[tl.floatingBtnIcon]}>✨</Text>
-          <Text style={[tl.floatingBtnText, { color: theme.colors.primary }]}>
-            Custom Habit
-          </Text>
+          <Text style={tl.floatingBtnText}>{t('templates.customHabit')}</Text>
         </Pressable>
       </Animated.View>
     </SafeAreaView>
@@ -569,21 +696,21 @@ const tl = StyleSheet.create({
     paddingHorizontal: 20,
   },
   floatingBtnPress: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  floatingBtnIcon: {
-    fontSize: 18,
+    paddingVertical: 16,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
   },
   floatingBtnText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 
   // ── Empty search state ─────────────────────────────────────────────────────

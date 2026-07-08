@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLanguage } from '../../src/i18n/LanguageContext';
 import { useHabitStore } from '../../src/store/useHabitStore';
 import { useTheme } from '../../src/theme/ThemeContext';
 import type { HabitType } from '../../src/models/types';
@@ -21,37 +22,37 @@ import { generateId } from '../../src/utils/id';
 
 // ─── Unit categories ──────────────────────────────────────────────────────────
 
-const UNIT_CATEGORIES: { name: string; units: string[] }[] = [
+const UNIT_CATEGORIES: { nameKey: string; units: string[] }[] = [
   {
-    name: 'Most popular',
+    nameKey: 'form.unitMostPopular',
     units: ['Minutes', 'Bottles', 'Cups', 'Litres', 'Pages', 'Chapters'],
   },
   {
-    name: 'Count',
+    nameKey: 'form.unitCount',
     units: ['Count', 'Times', 'Reps', 'Sets', 'Laps', 'Rounds'],
   },
   {
-    name: 'Duration',
+    nameKey: 'form.unitDuration',
     units: ['Hours', 'Minutes', 'Seconds', 'Milliseconds'],
   },
   {
-    name: 'Distance',
+    nameKey: 'form.unitDistance',
     units: ['Kilometres', 'Miles', 'Meters', 'Steps', 'Feet'],
   },
   {
-    name: 'Volume',
+    nameKey: 'form.unitVolume',
     units: ['Litres', 'Millilitres', 'US Gallons', 'US Quarts', 'Metric Pints', 'Cups', 'US Fluid Ounces', 'Tablespoons', 'Teaspoons'],
   },
   {
-    name: 'Weight',
+    nameKey: 'form.unitWeight',
     units: ['Kilograms', 'Pounds', 'Grams', 'Ounces'],
   },
   {
-    name: 'Health',
+    nameKey: 'form.unitHealth',
     units: ['Calories', 'Glasses', 'Milligrams', 'Micrograms', 'Percent', 'BPM'],
   },
   {
-    name: 'Other',
+    nameKey: 'form.unitOther',
     units: ['Pages', 'Chapters', 'Words', 'Lines', 'Tasks', 'Items', 'Lessons', 'Sessions'],
   },
 ];
@@ -75,7 +76,6 @@ const ALL_ICONS = [
 ];
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
-const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 const todayISO = () => {
   const d = new Date();
@@ -93,32 +93,7 @@ const addDays = (iso: string, n: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const TYPE_CONFIG: Record<HabitType, { label: string; icon: string; color: string; desc: string }> = {
-  good: {
-    label: 'Good',
-    icon: '✅',
-    color: '#4CAF50',
-    desc: 'Starts as uncompleted. Each mark increases the habit value',
-  },
-  bad: {
-    label: 'Bad',
-    icon: '🚫',
-    color: '#F44336',
-    desc: 'Habit has two statuses: completed or missed. Marks increase the bad habit counter.',
-  },
-  track: {
-    label: 'Track',
-    icon: '📊',
-    color: '#FF9800',
-    desc: 'A habit without a goal, reminders, or missed badge.',
-  },
-  todo: {
-    label: 'To-Do',
-    icon: '📋',
-    color: '#2196F3',
-    desc: 'One-time habit that disappears after completion',
-  },
-};
+
 
 // ─── Floating calendar modal ──────────────────────────────────────────────────
 
@@ -140,6 +115,7 @@ function CalendarPickerModal({
   minDate?: string;
 }) {
   const theme = useTheme();
+  const { t } = useLanguage();
   const [viewYear, setViewYear] = useState(() => parseInt(selectedDate.slice(0, 4), 10));
   const [viewMonth, setViewMonth] = useState(() => parseInt(selectedDate.slice(5, 7), 10) - 1);
   const [showYearPicker, setShowYearPicker] = useState(false);
@@ -233,8 +209,8 @@ function CalendarPickerModal({
             <>
               {/* Day headers */}
               <View style={calM.dayHeaders}>
-                {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
-                  <Text key={d} style={[calM.dayHeaderText, { color: theme.colors.textSecondary }]}>{d}</Text>
+                {[0, 1, 2, 3, 4, 5, 6].map(d => (
+                  <Text key={d} style={[calM.dayHeaderText, { color: theme.colors.textSecondary }]}>{t(`day.${d}`).toUpperCase()}</Text>
                 ))}
               </View>
               {/* Weeks */}
@@ -319,6 +295,7 @@ function Row({
 
 export default function NewHabitScreen() {
   const theme = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const saveHabit = useHabitStore((s) => s.saveHabit);
@@ -353,8 +330,7 @@ export default function NewHabitScreen() {
   const [showColor, setShowColor] = useState(false);
   const [showIcon, setShowIcon] = useState(false);
   const [showDesc, setShowDesc] = useState(false);
-  const [showType, setShowType] = useState(false);
-  const [showGoal, setShowGoal] = useState(false);
+const [showGoal, setShowGoal] = useState(false);
   const [showRepeat, setShowRepeat] = useState(false);
   const [showUrl, setShowUrl] = useState(false);
 
@@ -370,10 +346,13 @@ export default function NewHabitScreen() {
   const [tempUrl, setTempUrl] = useState('');
 
   // ── Derived ─────────────────────────────────────────────────────────────────
-  const repeatLabel = repeatDays.length === 7 ? 'Every day' : repeatDays.length === 0 ? 'Never' : `${repeatDays.length} days/week`;
-  const typeConfig = TYPE_CONFIG[habitType];
+  const repeatLabel = repeatDays.length === 7
+    ? t('form.everyDay')
+    : repeatDays.length === 0
+    ? t('form.never')
+    : t('form.daysPerWeek', { count: repeatDays.length });
 
-  const toggleDay = (d: number) =>
+const toggleDay = (d: number) =>
     setRepeatDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
 
   const adjustGoal = (delta: number) =>
@@ -403,7 +382,7 @@ export default function NewHabitScreen() {
 
   const filteredCategories = unitSearch.trim()
     ? UNIT_CATEGORIES.map((cat) => ({
-        ...cat,
+        nameKey: cat.nameKey,
         units: cat.units.filter((u) => u.toLowerCase().includes(unitSearch.toLowerCase())),
       })).filter((cat) => cat.units.length > 0)
     : UNIT_CATEGORIES;
@@ -416,7 +395,7 @@ export default function NewHabitScreen() {
       setCalendarFor(null);
     } else if (calendarFor === 'end') {
       if (iso <= startDate) {
-        Alert.alert('Invalid date', 'End date must be after start date.');
+        Alert.alert(t('form.invalidDate'), t('form.invalidDateMsg'));
         return;
       }
       setEndDate(iso);
@@ -430,7 +409,7 @@ export default function NewHabitScreen() {
   const handleSave = async () => {
     if (saving) return;
     const trimmed = title.trim();
-    if (!trimmed) { Alert.alert('Name required', 'Please enter a habit name.'); return; }
+    if (!trimmed) { Alert.alert(t('form.nameRequired'), t('form.nameRequiredMsg')); return; }
     setSaving(true);
     const isCountingHabit = habitType === 'track' || (habitType === 'todo' && goal > 1) || (habitType === 'good' && goal > 1);
     await saveHabit({
@@ -455,7 +434,7 @@ export default function NewHabitScreen() {
     router.navigate('/');
   };
 
-  const previewSubtitle = habitType === 'todo' ? 'To-do' : repeatDays.length === 7 ? `Every day, ${goal}` : `${repeatLabel}, ${goal}`;
+  const previewSubtitle = habitType === 'todo' ? t('form.previewTodo') : repeatDays.length === 7 ? `${t('form.everyDay')}, ${goal}` : `${repeatLabel}, ${goal}`;
 
   return (
     <View style={[s.screen, { backgroundColor: theme.colors.background }]}>
@@ -466,7 +445,7 @@ export default function NewHabitScreen() {
           <Pressable onPress={() => router.back()} style={s.hdrBack}>
             <Text style={[s.hdrBackText, { color: theme.colors.textPrimary }]}>‹</Text>
           </Pressable>
-          <Text style={[s.hdrTitle, { color: theme.colors.textPrimary }]}>Add Habit</Text>
+          <Text style={[s.hdrTitle, { color: theme.colors.textPrimary }]}>{t('form.addHabit')}</Text>
           <Pressable onPress={handleSave} style={[s.hdrSave, { backgroundColor: color }]}>
             <Text style={s.hdrSaveText}>✓</Text>
           </Pressable>
@@ -482,7 +461,7 @@ export default function NewHabitScreen() {
             <TextInput
               value={title}
               onChangeText={setTitle}
-              placeholder="Habit Name"
+              placeholder={t('form.habitNameInput')}
               placeholderTextColor="rgba(255,255,255,0.55)"
               style={s.previewInput}
               maxLength={100}
@@ -494,9 +473,9 @@ export default function NewHabitScreen() {
         <Text style={[s.charCount, { color: theme.colors.textSecondary }]}>{title.length}/100</Text>
 
         {/* ── Appearance ────────────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>Appearance</Text>
+        <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>{t('settings.appearance')}</Text>
         <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Row icon="🎨" label="Color" onPress={() => setShowColor(true)}
+          <Row icon="🎨" label={t('form.color')} onPress={() => setShowColor(true)}
             rightNode={
               <View style={s.rowRight}>
                 <View style={[s.colorDotSm, { backgroundColor: color }]} />
@@ -504,7 +483,7 @@ export default function NewHabitScreen() {
               </View>
             }
           />
-          <Row icon="🔣" label="Icon" onPress={() => setShowIcon(true)}
+          <Row icon="🔣" label={t('form.icon')} onPress={() => setShowIcon(true)}
             rightNode={
               <View style={s.rowRight}>
                 <Text style={{ fontSize: 18 }}>{icon}</Text>
@@ -512,32 +491,21 @@ export default function NewHabitScreen() {
               </View>
             }
           />
-          <Row icon="📄" label="Description" value={description || 'Empty'}
+          <Row icon="📄" label={t('form.description')} value={description || t('form.descriptionEmpty')}
             onPress={() => { setTempDesc(description); setShowDesc(true); }} isLast />
         </View>
 
         {/* ── General ───────────────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>General</Text>
+        <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>{t('settings.general')}</Text>
         <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Row icon="✅" label="Type" onPress={() => setShowType(true)}
-            rightNode={
-              <View style={s.rowRight}>
-                <Text style={{ fontSize: 15 }}>{typeConfig.icon}</Text>
-                <Text style={[s.rowValue, { color: theme.colors.textSecondary }]}>{typeConfig.label}</Text>
-                <Text style={[s.chevron, { color: theme.colors.textSecondary }]}>›</Text>
-              </View>
-            }
-          />
-          <Row icon="📁" label="Groups" value="No group" onPress={() => {}} />
-          <Row icon="🚩" label="Goal" value={`${goal}`} onPress={openGoal} />
-          <Row icon="÷" label="Average" value="None" onPress={() => {}} />
-          <Row icon="🔁" label="Repeat" value={repeatLabel} onPress={() => setShowRepeat(true)} />
-          <Row icon="🔔" label="Notifications" value="Automatic" onPress={() => {}} />
-          <Row icon="🔗" label="URL" value={url || 'None'} onPress={() => { setTempUrl(url); setShowUrl(true); }} />
+          <Row icon="🚩" label={t('form.goal')} value={`${goal}`} onPress={openGoal} />
+          <Row icon="🔁" label={t('form.repeat')} value={repeatLabel} onPress={() => setShowRepeat(true)} />
+          <Row icon="🔔" label={t('form.notifications')} value={t('form.automatic')} onPress={() => {}} />
+          <Row icon="🔗" label={t('form.url')} value={url || t('form.none')} onPress={() => { setTempUrl(url); setShowUrl(true); }} />
           {/* Starts on */}
           <Row
             icon="📅"
-            label="Starts on"
+            label={t('form.startsOn')}
             onPress={() => setCalendarFor('start')}
             rightNode={
               <View style={[s.datePill, { backgroundColor: color + '22' }]}>
@@ -549,7 +517,7 @@ export default function NewHabitScreen() {
           {/* Ends toggle */}
           <View style={s.row}>
             <Text style={s.rowIcon}>🗓</Text>
-            <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>Ends</Text>
+            <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>{t('form.ends')}</Text>
             <Switch
               value={endsEnabled}
               onValueChange={(v) => {
@@ -569,7 +537,7 @@ export default function NewHabitScreen() {
           {endsEnabled && endDate && (
             <Row
               icon="🏁"
-              label="Ends on"
+              label={t('form.endsOn')}
               onPress={() => setCalendarFor('end')}
               rightNode={
                 <View style={[s.datePill, { backgroundColor: color + '22' }]}>
@@ -606,7 +574,7 @@ export default function NewHabitScreen() {
           <Pressable style={s.overlay} onPress={() => setShowIcon(false)} />
           <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
             <View style={s.handle} />
-            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>Icon</Text>
+            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.icon')}</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={s.iconGrid}>
                 {ALL_ICONS.map((ic) => (
@@ -627,44 +595,22 @@ export default function NewHabitScreen() {
           <Pressable style={s.overlay} onPress={() => setShowDesc(false)} />
           <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
             <View style={s.handle} />
-            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>Description</Text>
+            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.description')}</Text>
             <View style={[s.textBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-              <TextInput value={tempDesc} onChangeText={setTempDesc} multiline placeholder="Description"
+              <TextInput value={tempDesc} onChangeText={setTempDesc} multiline placeholder={t('form.description')}
                 placeholderTextColor={theme.colors.textSecondary}
                 style={[s.textBoxInput, { color: theme.colors.textPrimary }]}
                 maxLength={4000} autoFocus />
             </View>
             <Text style={[s.hint, { color: theme.colors.textSecondary }]}>
-              Leave the field blank to remove the description{'   '}{tempDesc.length}/4,000
+              {t('form.descriptionHint')}{'   '}{tempDesc.length}/4,000
             </Text>
             <Pressable onPress={() => { setDescription(tempDesc); setShowDesc(false); }}
               style={[s.doneBtn, { backgroundColor: color }]}>
-              <Text style={s.doneBtnText}>Done</Text>
+              <Text style={s.doneBtnText}>{t('form.done')}</Text>
             </Pressable>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Type Picker ──────────────────────────────────────────────────── */}
-      <Modal visible={showType} transparent animationType="slide" onRequestClose={() => setShowType(false)}>
-        <View style={s.sheetWrap}>
-          <Pressable style={s.overlay} onPress={() => setShowType(false)} />
-          <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
-            <View style={s.handle} />
-            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>Type</Text>
-            {(Object.entries(TYPE_CONFIG) as [HabitType, typeof TYPE_CONFIG[HabitType]][]).map(([key, cfg]) => (
-              <View key={key}>
-                <Pressable onPress={() => { setHabitType(key); setShowType(false); }}
-                  style={[s.typeRow, { backgroundColor: theme.colors.background }]}>
-                  <Text style={s.typeIcon}>{cfg.icon}</Text>
-                  <Text style={[s.typeLabel, { color: theme.colors.textPrimary }]}>{cfg.label}</Text>
-                  {habitType === key && <Text style={[s.typeCheck, { color: color }]}>✓</Text>}
-                </Pressable>
-                <Text style={[s.typeDesc, { color: theme.colors.textSecondary }]}>{cfg.desc}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
       </Modal>
 
       {/* ── Goal (full-screen) ───────────────────────────────────────────── */}
@@ -677,16 +623,16 @@ export default function NewHabitScreen() {
               style={s.goalHdrSide}
             >
               <Text style={[s.goalHdrCancel, { color: theme.colors.textSecondary }]}>
-                {showUnitPicker ? '‹  Goal' : 'Cancel'}
+                {showUnitPicker ? `‹  ${t('form.goal')}` : t('form.cancel')}
               </Text>
             </Pressable>
             <Text style={[s.hdrTitle, { color: theme.colors.textPrimary }]}>
-              {showUnitPicker ? 'Unit' : 'Goal'}
+              {showUnitPicker ? t('form.unit') : t('form.goal')}
             </Text>
             <View style={[s.goalHdrSide, { alignItems: 'flex-end' }]}>
               {!showUnitPicker && (
                 <Pressable onPress={saveGoal} hitSlop={12}>
-                  <Text style={[s.goalHdrDone, { color: color }]}>Done</Text>
+                  <Text style={[s.goalHdrDone, { color: color }]}>{t('form.done')}</Text>
                 </Pressable>
               )}
             </View>
@@ -696,26 +642,13 @@ export default function NewHabitScreen() {
             /* ── Goal form ────────────────────────────────────────────── */
             <ScrollView contentContainerStyle={s.goalScroll}>
 
-              {/* Apple Health */}
-              <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginHorizontal: 16 }]}>
-                <View style={s.row}>
-                  <Text style={s.rowIcon}>🤍</Text>
-                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>Apple Health</Text>
-                  <Switch value={false} disabled
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }} thumbColor="#fff" />
-                </View>
-              </View>
-              <Text style={[s.hint, { color: theme.colors.textSecondary, marginHorizontal: 20, marginTop: 6, marginBottom: 20 }]}>
-                Synchronize the habit data with the Health app
-              </Text>
-
               {/* Goal / Unit / Step */}
               <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginHorizontal: 16 }]}>
 
                 {/* Goal row */}
                 <View style={[s.row, { paddingRight: 8 }]}>
                   <Text style={s.rowIcon}>🚩</Text>
-                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>Goal</Text>
+                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>{t('form.goal')}</Text>
                   <View style={s.stepperWrap}>
                     <View style={[s.stepperBox, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
                       <TextInput
@@ -742,7 +675,7 @@ export default function NewHabitScreen() {
                 {/* Unit row */}
                 <Pressable style={s.row} onPress={() => setShowUnitPicker(true)}>
                   <Text style={s.rowIcon}>📏</Text>
-                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>Unit</Text>
+                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>{t('form.unit')}</Text>
                   <View style={s.rowRight}>
                     <Text style={[s.rowValue, { color: theme.colors.textSecondary }]}>{unit}</Text>
                     <Text style={[s.chevron, { color: theme.colors.textSecondary }]}>›</Text>
@@ -754,7 +687,7 @@ export default function NewHabitScreen() {
                 {/* Step row */}
                 <View style={[s.row, { paddingRight: 8 }]}>
                   <Text style={s.rowIcon}>➕</Text>
-                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>Step</Text>
+                  <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>{t('form.step')}</Text>
                   <View style={[s.stepperBox, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
                     <TextInput
                       value={tempStepStr}
@@ -768,21 +701,7 @@ export default function NewHabitScreen() {
               </View>
 
               <Text style={[s.hint, { color: theme.colors.textSecondary, marginHorizontal: 20, marginTop: 8 }]}>
-                When you tap on the habit, this amount will be added
-              </Text>
-
-              {/* Goal Plan */}
-              <Text style={[s.sectionLabel, { color: theme.colors.textSecondary, marginTop: 24 }]}>Goal Plan</Text>
-              <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginHorizontal: 16 }]}>
-                <Pressable style={s.row}>
-                  <View style={[s.addPlanIcon, { backgroundColor: color }]}>
-                    <Text style={{ color: '#fff', fontSize: 18, lineHeight: 20 }}>+</Text>
-                  </View>
-                  <Text style={[s.addPlanText, { color: theme.colors.textPrimary }]}>Add Goal Plan</Text>
-                </Pressable>
-              </View>
-              <Text style={[s.hint, { color: theme.colors.textSecondary, marginHorizontal: 20, marginTop: 8 }]}>
-                Goal plans let you change a habit's goal over time without affecting previous history
+                {t('form.stepHint')}
               </Text>
 
               <View style={{ height: 40 }} />
@@ -793,7 +712,7 @@ export default function NewHabitScreen() {
               <ScrollView contentContainerStyle={s.goalScroll} keyboardShouldPersistTaps="handled">
 
                 {/* Custom unit */}
-                <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>Custom</Text>
+                <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>{t('form.customUnitLabel')}</Text>
                 <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginHorizontal: 16 }]}>
                   <View style={s.row}>
                     <View style={[s.customUnitIcon, { backgroundColor: '#2196F3' }]}>
@@ -803,7 +722,7 @@ export default function NewHabitScreen() {
                       value={customUnit}
                       onChangeText={(v) => { setCustomUnit(v); }}
                       onSubmitEditing={() => { if (customUnit.trim()) selectUnit(customUnit.trim()); }}
-                      placeholder="Custom unit"
+                      placeholder={t('form.customUnitPlaceholder')}
                       placeholderTextColor={theme.colors.textSecondary}
                       style={[s.customUnitInput, { color: theme.colors.textPrimary }]}
                       returnKeyType="done"
@@ -813,8 +732,8 @@ export default function NewHabitScreen() {
 
                 {/* Category lists */}
                 {filteredCategories.map((cat) => (
-                  <View key={cat.name}>
-                    <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>{cat.name}</Text>
+                  <View key={cat.nameKey}>
+                    <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>{t(cat.nameKey)}</Text>
                     <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginHorizontal: 16 }]}>
                       {cat.units.map((u, idx) => (
                         <View key={u}>
@@ -843,7 +762,7 @@ export default function NewHabitScreen() {
                 <TextInput
                   value={unitSearch}
                   onChangeText={setUnitSearch}
-                  placeholder="Search"
+                  placeholder={t('form.searchUnit')}
                   placeholderTextColor={theme.colors.textSecondary}
                   style={[s.unitSearchInput, { color: theme.colors.textPrimary }]}
                 />
@@ -859,20 +778,20 @@ export default function NewHabitScreen() {
           <Pressable style={s.overlay} onPress={() => setShowRepeat(false)} />
           <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
             <View style={s.handle} />
-            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>Repeat</Text>
-            <Text style={[s.repeatSectionLabel, { color: theme.colors.textSecondary }]}>Frequency</Text>
+            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.repeat')}</Text>
+            <Text style={[s.repeatSectionLabel, { color: theme.colors.textSecondary }]}>{t('form.goalFrequency')}</Text>
             <View style={s.daysRow}>
               {ALL_DAYS.map((d) => (
                 <Pressable key={d} onPress={() => toggleDay(d)}
                   style={[s.dayCircle, repeatDays.includes(d) ? { backgroundColor: color } : { backgroundColor: theme.colors.surfaceRaised }]}>
                   <Text style={[s.dayLabel, { color: repeatDays.includes(d) ? '#fff' : theme.colors.textSecondary }]}>
-                    {DAY_LABELS[d]}
+                    {t(`day.${d}`)}
                   </Text>
                 </Pressable>
               ))}
             </View>
             <Pressable onPress={() => setShowRepeat(false)} style={[s.doneBtn, { backgroundColor: color, marginTop: 24 }]}>
-              <Text style={s.doneBtnText}>Done</Text>
+              <Text style={s.doneBtnText}>{t('form.done')}</Text>
             </Pressable>
           </View>
         </View>
@@ -884,19 +803,19 @@ export default function NewHabitScreen() {
           <Pressable style={s.overlay} onPress={() => setShowUrl(false)} />
           <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
             <View style={s.handle} />
-            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>URL</Text>
+            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.url')}</Text>
             <View style={[s.textBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-              <TextInput value={tempUrl} onChangeText={setTempUrl} placeholder="URL"
+              <TextInput value={tempUrl} onChangeText={setTempUrl} placeholder={t('form.url')}
                 placeholderTextColor={theme.colors.textSecondary}
                 style={[s.textBoxInput, { color: theme.colors.textPrimary }]}
                 autoCapitalize="none" keyboardType="url" autoFocus />
             </View>
             <Text style={[s.hint, { color: theme.colors.textSecondary }]}>
-              Leave the field blank to remove the URL
+              {t('form.urlHint')}
             </Text>
             <Pressable onPress={() => { setUrl(tempUrl); setShowUrl(false); }}
               style={[s.doneBtn, { backgroundColor: color }]}>
-              <Text style={s.doneBtnText}>Done</Text>
+              <Text style={s.doneBtnText}>{t('form.done')}</Text>
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -1023,12 +942,6 @@ const s = StyleSheet.create({
   textBoxInput: { fontSize: 15, lineHeight: 22, padding: 0 },
   hint: { fontSize: 12, lineHeight: 17 },
 
-  // Type picker
-  typeRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, marginBottom: 2, gap: 12 },
-  typeIcon: { fontSize: 22 },
-  typeLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
-  typeCheck: { fontSize: 18, fontWeight: '700' },
-  typeDesc: { fontSize: 13, marginHorizontal: 4, marginBottom: 12, lineHeight: 18 },
 
   // Goal screen — stepper
   stepperWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -1044,13 +957,6 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   stepDotText: { color: '#fff', fontSize: 9, fontWeight: '700' },
-
-  // Goal Plan
-  addPlanIcon: {
-    width: 32, height: 32, borderRadius: 16,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  addPlanText: { fontSize: 16, fontWeight: '600' },
 
   // Unit picker
   unitRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },

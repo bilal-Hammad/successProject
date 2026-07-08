@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHealthKitSync } from '../../src/hooks/useHealthKit';
 import {
@@ -79,12 +80,23 @@ export default function TodayScreen() {
   const stripDays = useRef(buildDayStrip()).current;
   const flatRef = useRef<FlatList>(null);
 
-  useEffect(() => {
-    const t2 = setTimeout(() => {
-      flatRef.current?.scrollToIndex({ index: TODAY_INDEX, animated: false, viewPosition: 0.5 });
-    }, 80);
-    return () => clearTimeout(t2);
-  }, []);
+  // Ref so the focus callback always sees the latest selectedDate without being a dep
+  const selectedDateRef = useRef(selectedDate);
+  useEffect(() => { selectedDateRef.current = selectedDate; });
+
+  // Reset to today whenever this screen gains focus (tab switch, back navigation, app resume)
+  useFocusEffect(
+    useCallback(() => {
+      const currentToday = todayString(dayStartsAt);
+      if (selectedDateRef.current !== currentToday) {
+        setSelectedDate(currentToday);
+      }
+      const timer = setTimeout(() => {
+        flatRef.current?.scrollToIndex({ index: TODAY_INDEX, animated: false, viewPosition: 0.5 });
+      }, 80);
+      return () => clearTimeout(timer);
+    }, [dayStartsAt])
+  );
 
   // ── Derived ───────────────────────────────────────────────────────────────
 

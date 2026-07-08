@@ -11,14 +11,14 @@ export type HealthTemplate = {
 
 export type HealthTemplateSection = {
   id: string;
-  label: string;
+  labelKey: string;
   templates: HealthTemplate[];
 };
 
 export const APPLE_HEALTH_SECTIONS: HealthTemplateSection[] = [
   {
     id: 'activity',
-    label: 'Activity',
+    labelKey: 'section.activity',
     templates: [
       { id: 'hk-steps',    title: 'Steps',                       emoji: '👟', icon: '👟', color: '#34C759', healthKitType: 'HKQuantityTypeIdentifierStepCount',                      unit: 'steps',    defaultGoal: 10000 },
       { id: 'hk-run',      title: 'Run',                         emoji: '🏃', icon: '🏃', color: '#34C759', healthKitType: 'HKWorkoutActivityTypeRunning',                           unit: 'minutes',  defaultGoal: 30    },
@@ -40,28 +40,28 @@ export const APPLE_HEALTH_SECTIONS: HealthTemplateSection[] = [
   },
   {
     id: 'sleep',
-    label: 'Sleep',
+    labelKey: 'section.sleep',
     templates: [
       { id: 'hk-sleep',   title: 'Sleep', emoji: '😴', icon: '😴', color: '#34C759', healthKitType: 'HKCategoryTypeIdentifierSleepAnalysis', unit: 'hours', defaultGoal: 8 },
     ],
   },
   {
     id: 'heart',
-    label: 'Heart',
+    labelKey: 'section.heart',
     templates: [
       { id: 'hk-bp',      title: 'Record Blood Pressure', emoji: '💚', icon: '💚', color: '#34C759', healthKitType: 'HKCorrelationTypeIdentifierBloodPressure', unit: 'mmHg', defaultGoal: 1 },
     ],
   },
   {
     id: 'mental',
-    label: 'Mental Wellbeing',
+    labelKey: 'section.mentalWellbeing',
     templates: [
       { id: 'hk-mindful', title: 'Mindful Session', emoji: '🧘', icon: '🧘', color: '#34C759', healthKitType: 'HKCategoryTypeIdentifierMindfulSession', unit: 'minutes', defaultGoal: 10 },
     ],
   },
   {
     id: 'nutrition',
-    label: 'Nutrition',
+    labelKey: 'section.nutrition',
     templates: [
       { id: 'hk-water',   title: 'Drink Water',          emoji: '💧', icon: '💧', color: '#34C759', healthKitType: 'HKQuantityTypeIdentifierDietaryWater',    unit: 'ml',    defaultGoal: 2000 },
       { id: 'hk-coffee',  title: 'Limit Coffee',         emoji: '☕', icon: '☕', color: '#34C759', healthKitType: 'HKQuantityTypeIdentifierDietaryCaffeine',  unit: 'mg',    defaultGoal: 400  },
@@ -70,7 +70,7 @@ export const APPLE_HEALTH_SECTIONS: HealthTemplateSection[] = [
   },
   {
     id: 'body',
-    label: 'Body Measurements',
+    labelKey: 'section.bodyMeasurements',
     templates: [
       { id: 'hk-weight',  title: 'Record Weight',        emoji: '⚖️', icon: '⚖️', color: '#34C759', healthKitType: 'HKQuantityTypeIdentifierBodyMass',              unit: 'kg',  defaultGoal: 1 },
       { id: 'hk-lean',    title: 'Record Lean Body Mass',emoji: '⚖️', icon: '⚖️', color: '#34C759', healthKitType: 'HKQuantityTypeIdentifierLeanBodyMass',          unit: 'kg',  defaultGoal: 1 },
@@ -81,7 +81,7 @@ export const APPLE_HEALTH_SECTIONS: HealthTemplateSection[] = [
   },
   {
     id: 'other',
-    label: 'Other',
+    labelKey: 'section.other',
     templates: [
       { id: 'hk-handwash', title: 'Wash Your Hands', emoji: '🙌', icon: '🙌', color: '#34C759', healthKitType: 'HKCategoryTypeIdentifierHandwashingEvent', unit: 'times', defaultGoal: 8 },
     ],

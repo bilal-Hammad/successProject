@@ -2,16 +2,49 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { Component, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
 
-class SplashErrorBoundary extends Component<{ children: ReactNode; onError: () => void }> {
+class SplashErrorBoundary extends Component<
+  { children: ReactNode; onError: () => void },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
   componentDidCatch() {
     SplashScreen.hideAsync().catch(() => {});
     this.props.onError();
   }
   render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+class AppErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; message: string }
+> {
+  state = { hasError: false, message: '' };
+  static getDerivedStateFromError(e: Error) {
+    return { hasError: true, message: e?.message ?? String(e) };
+  }
+  componentDidCatch(e: Error) {
+    SplashScreen.hideAsync().catch(() => {});
+    console.error('[FORGE] App render error:', e?.message, e?.stack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#131825', padding: 32 }}>
+          <Text style={{ color: '#FF3B30', fontSize: 18, fontWeight: '700', marginBottom: 12 }}>Something went wrong</Text>
+          <Text style={{ color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+            {__DEV__ ? this.state.message : 'Please force-quit and reopen Forge.'}
+          </Text>
+        </View>
+      );
+    }
     return this.props.children;
   }
 }
@@ -24,6 +57,8 @@ import { requestNotificationPermission } from '../src/notifications/reminders';
 import { useHabitStore } from '../src/store/useHabitStore';
 import { useMoodStore } from '../src/store/useMoodStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
+import { useAuthStore } from '../src/store/useAuthStore';
+import { useTemplateSectionStore } from '../src/store/useTemplateSectionStore';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
 const STRIPS = 20;
@@ -63,11 +98,18 @@ function RootLayoutInner() {
   const hydrate = useHabitStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const hydrateMoods = useMoodStore((s) => s.hydrate);
+  const hydrateSections = useTemplateSectionStore((s) => s.hydrate);
+  const initAuthListener = useAuthStore((s) => s._initListener);
   const { t, isRTL } = useLanguage();
   const theme = useTheme();
 
   const [hydrated, setHydrated] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
+
+  useEffect(() => {
+    const unsubscribeAuth = initAuthListener();
+    return unsubscribeAuth;
+  }, []);
 
   useEffect(() => {
     // 1.5-second safety: splash always clears even if hydration hangs.
@@ -77,7 +119,7 @@ function RootLayoutInner() {
       SplashScreen.hideAsync().catch(() => {});
     }, 1500);
 
-    Promise.all([hydrate(), hydrateSettings(), hydrateMoods()])
+    Promise.all([hydrate(), hydrateSettings(), hydrateMoods(), hydrateSections()])
       .then(() => {
         clearTimeout(safety);
         requestNotificationPermission();
@@ -103,6 +145,7 @@ function RootLayoutInner() {
       {theme.customBg.enabled && (
         <GradientBackground start={theme.customBg.start} end={theme.customBg.end} />
       )}
+      <AppErrorBoundary>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: theme.customBg.enabled ? 'transparent' : theme.colors.background },
@@ -140,11 +183,7 @@ function RootLayoutInner() {
           name="settings-archived"
           options={{ title: t('settings.archivedHabits'), headerBackTitle: t('nav.back') }}
         />
-        <Stack.Screen
-          name="settings-groups"
-          options={{ title: t('settings.groups'), headerBackTitle: t('nav.back') }}
-        />
-        <Stack.Screen
+<Stack.Screen
           name="settings-vacations"
           options={{ title: t('settings.vacations'), headerBackTitle: t('nav.back') }}
         />
@@ -157,6 +196,7 @@ function RootLayoutInner() {
           options={{ title: t('settings.comingSoon'), headerBackTitle: t('nav.back') }}
         />
       </Stack>
+      </AppErrorBoundary>
 
       {/* Animated splash overlay — sits above the Stack, removed from tree when done */}
       {splashVisible && (

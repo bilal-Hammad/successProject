@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { I18nManager } from 'react-native';
 import { translate, type Language } from './translations';
 
 const STORAGE_KEY = '@app_language';
@@ -24,12 +25,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       const lang: Language = (stored as Language) || 'en';
+      I18nManager.allowRTL(true);
+      I18nManager.forceRTL(lang === 'ar');
       setLang(lang);
     }).catch(() => {});
   }, []);
 
   const setLanguage = async (lang: Language) => {
     await AsyncStorage.setItem(STORAGE_KEY, lang);
+    I18nManager.allowRTL(true);
+    I18nManager.forceRTL(lang === 'ar');
     setLang(lang);
   };
 

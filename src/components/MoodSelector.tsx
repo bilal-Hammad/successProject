@@ -11,24 +11,25 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { useLanguage } from '../i18n/LanguageContext';
 
 // ─── Zone table ───────────────────────────────────────────────────────────────
 
 interface Zone {
   min: number;
   max: number;
-  label: string;
+  labelKey: string;
   rgb: [number, number, number];
 }
 
 const ZONES: Zone[] = [
-  { min: 0,      max: 14.286, label: 'Very Unpleasant',     rgb: [91,  58,  140] },
-  { min: 14.286, max: 28.571, label: 'Unpleasant',          rgb: [108, 78,  168] },
-  { min: 28.571, max: 42.857, label: 'Slightly Unpleasant', rgb: [88,  118, 196] },
-  { min: 42.857, max: 57.143, label: 'Neutral',             rgb: [55,  130, 210] },
-  { min: 57.143, max: 71.429, label: 'Slightly Pleasant',   rgb: [80,  190, 180] },
-  { min: 71.429, max: 85.714, label: 'Pleasant',            rgb: [230, 150, 40]  },
-  { min: 85.714, max: 100,    label: 'Very Pleasant',       rgb: [230, 108, 22]  },
+  { min: 0,      max: 14.286, labelKey: 'mood.veryUnpleasant',     rgb: [91,  58,  140] },
+  { min: 14.286, max: 28.571, labelKey: 'mood.unpleasant',         rgb: [108, 78,  168] },
+  { min: 28.571, max: 42.857, labelKey: 'mood.slightlyUnpleasant', rgb: [88,  118, 196] },
+  { min: 42.857, max: 57.143, labelKey: 'mood.neutral',            rgb: [55,  130, 210] },
+  { min: 57.143, max: 71.429, labelKey: 'mood.slightlyPleasant',   rgb: [80,  190, 180] },
+  { min: 71.429, max: 85.714, labelKey: 'mood.pleasant',           rgb: [230, 150, 40]  },
+  { min: 85.714, max: 100,    labelKey: 'mood.veryPleasant',       rgb: [230, 108, 22]  },
 ];
 
 function getZone(v: number): Zone {
@@ -110,6 +111,7 @@ const THUMB_SIZE = 26;
 
 export function MoodSelector({ visible, initialValue = 50, onSave, onClose }: MoodSelectorProps) {
   const { width: screenW } = useWindowDimensions();
+  const { t } = useLanguage();
   const [value, setValue] = useState(initialValue);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -197,7 +199,7 @@ export function MoodSelector({ visible, initialValue = 50, onSave, onClose }: Mo
               {I18nManager.isRTL ? '›' : '‹'}
             </Text>
           </Pressable>
-          <Text style={s.headerTitle}>Emotion</Text>
+          <Text style={s.headerTitle}>{t('mood.emotion')}</Text>
           <Pressable
             onPress={onClose}
             hitSlop={12}
@@ -208,9 +210,7 @@ export function MoodSelector({ visible, initialValue = 50, onSave, onClose }: Mo
         </View>
 
         {/* ── Prompt ── */}
-        <Text style={s.prompt}>
-          {'Choose how you\'re feeling\nright now'}
-        </Text>
+        <Text style={s.prompt}>{t('mood.prompt')}</Text>
 
         {/* ── Morphing shape ── */}
         <Animated.View style={{ transform: [{ scale: breathe }] }}>
@@ -245,7 +245,7 @@ export function MoodSelector({ visible, initialValue = 50, onSave, onClose }: Mo
         </Animated.View>
 
         {/* ── Zone label ── */}
-        <Text style={s.zoneLabel}>{zone.label}</Text>
+        <Text style={s.zoneLabel}>{t(zone.labelKey)}</Text>
 
         {/* ── Slider ── */}
         <View style={s.sliderWrap}>
@@ -264,8 +264,8 @@ export function MoodSelector({ visible, initialValue = 50, onSave, onClose }: Mo
           </View>
 
           <View style={s.sliderLabels}>
-            <Text style={s.sliderEdge}>VERY UNPLEASANT</Text>
-            <Text style={s.sliderEdge}>VERY PLEASANT</Text>
+            <Text style={s.sliderEdge}>{t('mood.edgeLow')}</Text>
+            <Text style={s.sliderEdge}>{t('mood.edgeHigh')}</Text>
           </View>
         </View>
 
@@ -274,7 +274,7 @@ export function MoodSelector({ visible, initialValue = 50, onSave, onClose }: Mo
           onPress={() => onSave(value)}
           style={({ pressed }) => [s.nextBtn, { backgroundColor: accentHex, opacity: pressed ? 0.85 : 1 }]}
         >
-          <Text style={s.nextBtnTxt}>Next</Text>
+          <Text style={s.nextBtnTxt}>{t('mood.next')}</Text>
         </Pressable>
       </View>
     </Modal>

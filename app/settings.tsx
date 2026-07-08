@@ -364,13 +364,6 @@ export default function SettingsScreen() {
         <SectionHeader label={t('settings.data')} />
         <SectionCard>
           <SettingRow
-            icon="📦"
-            iconBg="#6C63FF"
-            label={t('settings.groups')}
-            isLast={false}
-            onPress={() => router.push('/settings-groups')}
-          />
-          <SettingRow
             icon="🌴"
             iconBg="#26A69A"
             label={t('settings.vacations')}
