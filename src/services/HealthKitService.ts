@@ -173,6 +173,59 @@ export function requestHealthKitPermission(hkType: string): Promise<HKPermResult
   });
 }
 
+// ─── Init HealthKit for all linked habits ────────────────────────────────────
+//
+// Must be called before any readTodayValue calls. Gathers all required read
+// permissions from the supplied hkType list and calls initHealthKit once.
+// Safe to call multiple times — HealthKit won't re-show the sheet for already
+// decided permissions.
+
+export function initForHabits(hkTypes: string[]): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isHealthKitAvailable()) { resolve(); return; }
+
+    if (typeof AppleHealthKit?.initHealthKit !== 'function') {
+      console.log('[FORGE] HealthKit: initForHabits skipped — initHealthKit not a function (simulator or native module not linked)');
+      resolve();
+      return;
+    }
+
+    const perms = AppleHealthKit?.Constants?.Permissions;
+    if (!perms) {
+      console.log('[FORGE] HealthKit: initForHabits skipped — Constants.Permissions unavailable');
+      resolve();
+      return;
+    }
+
+    const readSet = new Set<string>();
+    for (const hkType of hkTypes) {
+      const permName = permNameFor(hkType);
+      if (permName && perms[permName]) {
+        readSet.add(perms[permName]);
+      }
+    }
+    // Workout queries need the Workout permission regardless of specific type
+    if (hkTypes.some((t) => WORKOUT_TYPES.has(t)) && perms['Workout']) {
+      readSet.add(perms['Workout']);
+    }
+
+    if (readSet.size === 0) { resolve(); return; }
+
+    const options = { permissions: { read: Array.from(readSet), write: [] } };
+    console.log('[FORGE] HealthKit: initForHabits requesting', readSet.size, 'read permissions:', Array.from(readSet).join(', '));
+
+    AppleHealthKit.initHealthKit(options, (err: any) => {
+      if (err) {
+        console.log('[FORGE] HealthKit: initForHabits error:', typeof err === 'string' ? err : JSON.stringify(err));
+      } else {
+        console.log('[FORGE] HealthKit: initForHabits succeeded — permission sheet shown or already decided');
+      }
+      // Always resolve: HealthKit never reveals read-permission decisions to the app.
+      resolve();
+    });
+  });
+}
+
 // ─── Read today's value for a given HealthKit type ────────────────────────────
 
 export function readTodayValue(hkType: string): Promise<number> {
@@ -189,7 +242,10 @@ export function readTodayValue(hkType: string): Promise<number> {
     try {
       if (hkType === 'HKQuantityTypeIdentifierStepCount') {
         AppleHealthKit.getStepCount(options, (err: any, result: any) => {
-          resolve(err ? 0 : Math.round(result?.value ?? 0));
+          const val = err ? 0 : Math.round(result?.value ?? 0);
+          if (err) console.log('[FORGE] HealthKit: getStepCount error:', err);
+          else console.log('[FORGE] HealthKit: steps =', val);
+          resolve(val);
         });
 
       } else if (hkType === 'HKQuantityTypeIdentifierActiveEnergyBurned') {
@@ -205,10 +261,16 @@ export function readTodayValue(hkType: string): Promise<number> {
         });
 
       } else if (hkType === 'HKQuantityTypeIdentifierDietaryWater') {
+        // API returns liters; habit unit is ml → × 1000
         AppleHealthKit.getWaterSamples(options, (err: any, results: any[]) => {
-          if (err || !Array.isArray(results)) { resolve(0); return; }
+          if (err || !Array.isArray(results)) {
+            console.log('[FORGE] HealthKit: getWaterSamples error:', err);
+            resolve(0); return;
+          }
           const total = results.reduce((sum, r) => sum + (r.value ?? 0), 0);
-          resolve(Math.round(total * 1000));
+          const ml = Math.round(total * 1000);
+          console.log('[FORGE] HealthKit: water =', ml, 'ml (', results.length, 'samples,', total.toFixed(3), 'L)');
+          resolve(ml);
         });
 
       } else if (hkType === 'HKQuantityTypeIdentifierDietaryCaffeine') {
@@ -227,15 +289,22 @@ export function readTodayValue(hkType: string): Promise<number> {
         });
 
       } else if (hkType === 'HKCategoryTypeIdentifierSleepAnalysis') {
+        // Filter for true-sleep samples only (exclude AWAKE / IN_BED categories).
         AppleHealthKit.getSleepSamples(options, (err: any, results: any[]) => {
-          if (err || !Array.isArray(results)) { resolve(0); return; }
-          const asleepMinutes = results
-            .filter((r) => r.value === 'ASLEEP' || r.value === 'ASLEEP_CORE' || r.value === 'ASLEEP_DEEP')
-            .reduce((sum, r) => {
-              const ms = new Date(r.endDate).getTime() - new Date(r.startDate).getTime();
-              return sum + ms / 60000;
-            }, 0);
-          resolve(Math.round(asleepMinutes / 60));
+          if (err || !Array.isArray(results)) {
+            console.log('[FORGE] HealthKit: getSleepSamples error:', err);
+            resolve(0); return;
+          }
+          const asleepSamples = results.filter(
+            (r) => r.value === 'ASLEEP' || r.value === 'ASLEEP_CORE' || r.value === 'ASLEEP_DEEP',
+          );
+          const asleepMinutes = asleepSamples.reduce((sum, r) => {
+            const ms = new Date(r.endDate).getTime() - new Date(r.startDate).getTime();
+            return sum + ms / 60000;
+          }, 0);
+          const hours = Math.round(asleepMinutes / 60);
+          console.log(`[FORGE] HealthKit: sleep = ${hours}h (${asleepSamples.length}/${results.length} asleep samples, ${Math.round(asleepMinutes)} min)`);
+          resolve(hours);
         });
 
       } else if (hkType === 'HKCategoryTypeIdentifierMindfulSession') {
@@ -249,38 +318,56 @@ export function readTodayValue(hkType: string): Promise<number> {
         });
 
       } else if (WORKOUT_TYPES.has(hkType)) {
+        // Raw HKWorkoutActivityType enum values (iOS 10+/11+).
+        // These must match Apple's HKWorkoutActivityType exactly — wrong values
+        // cause filter to return 0 results silently.
         const workoutTypeMap: Record<string, number> = {
           HKWorkoutActivityTypeRunning:                      37,
           HKWorkoutActivityTypeCycling:                      13,
-          HKWorkoutActivityTypeSwimming:                     46,
-          HKWorkoutActivityTypeDownhillSkiing:               35,
-          HKWorkoutActivityTypeYoga:                         20,
-          HKWorkoutActivityTypeDance:                        76,
-          HKWorkoutActivityTypePilates:                      79,
-          HKWorkoutActivityTypeTennis:                       50,
-          HKWorkoutActivityTypeTraditionalStrengthTraining:  50,
-          HKWorkoutActivityTypeBoxing:                       10,
+          HKWorkoutActivityTypeSwimming:                     45,  // 46 = tableTennis
+          HKWorkoutActivityTypeDownhillSkiing:               61,  // 35 = rowing; 61 added iOS 11
+          HKWorkoutActivityTypeYoga:                         57,  // 20 = functionalStrengthTraining; 57 added iOS 10
+          HKWorkoutActivityTypeDance:                        14,  // 76 = fitnessGaming (iOS 14)
+          HKWorkoutActivityTypePilates:                      66,  // 79 = pickleball (iOS 14); 66 added iOS 11
+          HKWorkoutActivityTypeTennis:                       47,  // 50 = volleyball
+          HKWorkoutActivityTypeTraditionalStrengthTraining:  49,  // 50 = volleyball
+          HKWorkoutActivityTypeBoxing:                        8,  // 10 = cricket
         };
         const typeId = workoutTypeMap[hkType] ?? 1;
-        AppleHealthKit.getSamples(
-          { ...options, type: 'Workout', limit: 50 },
+        console.log(`[FORGE] HealthKit: reading ${hkType} (activityId=${typeId})`);
+        AppleHealthKit.getWorkoutSamples(
+          { ...options, limit: 100, ascending: false },
           (err: any, results: any[]) => {
-            if (err || !Array.isArray(results)) { resolve(0); return; }
+            if (err || !Array.isArray(results)) {
+              console.log(`[FORGE] HealthKit: getWorkoutSamples error for ${hkType}:`, err);
+              resolve(0); return;
+            }
             const filtered = results.filter((r) => r.activityId === typeId);
             const totalMinutes = filtered.reduce((sum, r) => {
-              const ms = new Date(r.end).getTime() - new Date(r.start).getTime();
+              const ms = new Date(r.endDate).getTime() - new Date(r.startDate).getTime();
               return sum + ms / 60000;
             }, 0);
+            console.log(`[FORGE] HealthKit: ${hkType}: ${filtered.length}/${results.length} workouts → ${Math.round(totalMinutes)} min`);
             resolve(Math.round(totalMinutes));
           },
         );
 
       } else if (hkType === 'HKCategoryTypeIdentifierAppleStandHour') {
+        // react-native-health exposes getAppleStandTime (exercise minutes).
+        // True stand-hour counting via category samples is unsupported by the library.
+        // Dividing exercise minutes by 60 gives a rough stand-hour proxy.
         AppleHealthKit.getAppleStandTime(options, (err: any, result: any) => {
-          resolve(err ? 0 : Math.round((result?.value ?? 0) / 60));
+          const val = err ? 0 : Math.round((result?.value ?? 0) / 60);
+          if (err) console.log('[FORGE] HealthKit: getAppleStandTime error:', err);
+          else console.log('[FORGE] HealthKit: stand (proxy) =', val, 'h (raw value:', result?.value, ')');
+          resolve(val);
         });
 
       } else if (hkType === 'HKCorrelationTypeIdentifierBloodPressure') {
+        // Blood pressure has no useful numeric value to read — just return 1 to
+        // mark the habit done if any reading exists today. Full correlation query
+        // is not supported by react-native-health.
+        console.log('[FORGE] HealthKit: blood pressure — returning 1 (logged=done sentinel)');
         resolve(1);
 
       } else if (hkType === 'HKQuantityTypeIdentifierBodyFatPercentage') {

@@ -33,6 +33,9 @@ export const GRADIENT_PRESETS: { start: string; end: string }[] = [
 
 export type WeekStart = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 1=Mon … 6=Sat
 
+export type ReminderSchedule = 'automatic' | 'custom';
+export type CalendarEventType = 'allDay' | 'automatic' | 'reminderTime';
+
 type Settings = {
   accentColorIndex: number;
   customBgEnabled: boolean;
@@ -46,6 +49,12 @@ type Settings = {
   soundsEnabled: boolean;
   completionSound: string;
   notificationsSound: string;
+  // Notifications
+  notificationsEnabled: boolean;
+  defaultReminderSchedule: ReminderSchedule;
+  // Calendar integration
+  calendarIntegrationEnabled: boolean;
+  calendarEventType: CalendarEventType;
 };
 
 const DEFAULTS: Settings = {
@@ -61,6 +70,10 @@ const DEFAULTS: Settings = {
   soundsEnabled: true,
   completionSound: 'Default',
   notificationsSound: 'Default',
+  notificationsEnabled: false,
+  defaultReminderSchedule: 'automatic',
+  calendarIntegrationEnabled: false,
+  calendarEventType: 'allDay',
 };
 
 type SettingsStore = Settings & {
@@ -103,6 +116,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         soundsEnabled: s.soundsEnabled,
         completionSound: s.completionSound,
         notificationsSound: s.notificationsSound,
+        notificationsEnabled: s.notificationsEnabled,
+        defaultReminderSchedule: s.defaultReminderSchedule,
+        calendarIntegrationEnabled: s.calendarIntegrationEnabled,
+        calendarEventType: s.calendarEventType,
       };
       await AsyncStorage.setItem(KEY, JSON.stringify(toSave));
     } catch {}

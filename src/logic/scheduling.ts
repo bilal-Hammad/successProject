@@ -3,9 +3,16 @@ import type { Habit } from '../models/types';
 
 export function habitsForDate(habits: Habit[], date: string): Habit[] {
   const dayOfWeek = dayjs(date).day(); // 0=Sun … 6=Sat
-  return habits.filter(
-    (h) => !h.archived && (h.weeklyTarget ? true : h.scheduleDays.includes(dayOfWeek))
-  );
+  return habits.filter((h) => {
+    if (h.archived) return false;
+    if (h.weeklyTarget) return true;
+    if (h.intervalDays) {
+      const startStr = h.startDate ?? dayjs(h.createdAt).format('YYYY-MM-DD');
+      const diff = dayjs(date).diff(dayjs(startStr), 'day');
+      return diff >= 0 && diff % h.intervalDays === 0;
+    }
+    return h.scheduleDays.includes(dayOfWeek);
+  });
 }
 
 // Returns 'YYYY-MM-DD' for the current effective day.

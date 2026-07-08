@@ -14,7 +14,10 @@
       "icon": "./assets/logo.png",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Forge reads your Apple Health activity to automatically complete your habits like steps, sleep, water, and workouts.",
-        "NSHealthUpdateUsageDescription": "Forge updates your habit progress in Apple Health."
+        "NSHealthUpdateUsageDescription": "Forge updates your habit progress in Apple Health.",
+        "NSCalendarsUsageDescription": "Forge Habits creates calendar entries for your habits so you can see them in Apple Calendar alongside your other events.",
+        "NSCalendarsFullAccessUsageDescription": "Forge Habits creates and manages calendar entries for your habits so you can see them in Apple Calendar alongside your other events.",
+        "NSRemindersUsageDescription": "Forge Habits creates reminders for your habits so they appear in the Apple Reminders app."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -32,6 +35,7 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
+      "expo-calendar",
       ["react-native-health", { "isClinicalDataEnabled": false }],
       [
         "expo-splash-screen",

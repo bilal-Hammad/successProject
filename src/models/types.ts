@@ -29,7 +29,13 @@ export type Habit = {
   endDate?: string;   // "YYYY-MM-DD"
   step?: number;      // increment step for counting/todo habits (default 1)
   healthKitType?: string;  // HealthKit identifier for auto-sync
+  intervalDays?: number;   // "every N days" mode: due when (date - startDate) % intervalDays === 0
+  remindMe?: boolean;      // per-habit reminder toggle
+  notificationIds?: string[];   // identifiers of scheduled expo-notifications
+  calendarEventIds?: string[];  // identifiers of created Apple Calendar/Reminder events
 };
+
+export type RepeatMode = 'daily' | 'specificDays' | 'timesPerWeek' | 'everyXDays';
 
 export type Completion = {
   habitId: string;

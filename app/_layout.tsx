@@ -53,7 +53,11 @@ class AppErrorBoundary extends Component<
 // Must be called before any component renders.
 SplashScreen.preventAutoHideAsync();
 import { LanguageProvider, useLanguage } from '../src/i18n/LanguageContext';
-import { requestNotificationPermission } from '../src/notifications/reminders';
+import {
+  requestNotificationPermission,
+  getNotificationPermissionStatus,
+  scheduleAllReminders,
+} from '../src/notifications/reminders';
 import { useHabitStore } from '../src/store/useHabitStore';
 import { useMoodStore } from '../src/store/useMoodStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
@@ -120,10 +124,27 @@ function RootLayoutInner() {
     }, 1500);
 
     Promise.all([hydrate(), hydrateSettings(), hydrateMoods(), hydrateSections()])
-      .then(() => {
+      .then(async () => {
         clearTimeout(safety);
-        requestNotificationPermission();
         setHydrated(true);
+
+        const { notificationsEnabled } = useSettingsStore.getState();
+        if (!notificationsEnabled) return;
+
+        // Request permission (no-op if already granted; shows dialog only on first launch).
+        const granted = await requestNotificationPermission().catch(() => false);
+        if (!granted) return;
+
+        // Verify OS still has permission (could be revoked externally or cleared on reboot).
+        const status = await getNotificationPermissionStatus();
+        if (status !== 'granted') return;
+
+        // Reschedule all habits. This is safe to call on every launch:
+        // - Cancels all existing triggers first, then re-creates them.
+        // - Recovers from device reboots (iOS clears all local notifications on reboot).
+        // - Extends the 60-day window for everyXDays habits.
+        // Runs in the background — doesn't block splash or first render.
+        scheduleAllReminders(useHabitStore.getState().habits);
       })
       .catch(() => {
         clearTimeout(safety);

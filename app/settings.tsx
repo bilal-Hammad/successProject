@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import dayjs from 'dayjs';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   Linking,
   Modal,
   Pressable,
@@ -16,8 +17,15 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../src/i18n/LanguageContext';
+import {
+  requestNotificationPermission,
+  getNotificationPermissionStatus,
+  scheduleAllReminders,
+  cancelAllReminders,
+} from '../src/notifications/reminders';
+import { requestCalendarPermission } from '../src/services/calendarService';
 import { useHabitStore } from '../src/store/useHabitStore';
-import { useSettingsStore } from '../src/store/useSettingsStore';
+import { useSettingsStore, type ReminderSchedule, type CalendarEventType } from '../src/store/useSettingsStore';
 import { useTheme } from '../src/theme/ThemeContext';
 
 // Lazy-load DateTimePicker so the app doesn't crash if the pod isn't installed yet.
@@ -163,6 +171,26 @@ export default function SettingsScreen() {
   const [weekSheetVisible, setWeekSheetVisible] = useState(false);
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
   const [tempTime, setTempTime] = useState<Date>(() => minutesToDate(settings.dayStartsAt));
+  const [reminderScheduleSheetVisible, setReminderScheduleSheetVisible] = useState(false);
+  const [calendarEventTypeSheetVisible, setCalendarEventTypeSheetVisible] = useState(false);
+  const [notifPermStatus, setNotifPermStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const appStateRef = useRef(AppState.currentState);
+
+  const refreshPermStatus = () => {
+    getNotificationPermissionStatus().then(setNotifPermStatus);
+  };
+
+  useEffect(() => {
+    refreshPermStatus();
+    // Re-check when user returns from iOS Settings — they may have changed permission there.
+    const sub = AppState.addEventListener('change', (next) => {
+      if (appStateRef.current.match(/inactive|background/) && next === 'active') {
+        refreshPermStatus();
+      }
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
+  }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -234,6 +262,59 @@ export default function SettingsScreen() {
       });
     } catch {}
   };
+
+  const handleNotificationsToggle = async (value: boolean) => {
+    if (value) {
+      const granted = await requestNotificationPermission();
+      const newStatus = granted ? 'granted' : 'denied';
+      setNotifPermStatus(newStatus);
+      if (!granted) {
+        Alert.alert(
+          t('settings.notificationsToggle'),
+          t('settings.notificationsDenied'),
+          [
+            { text: t('settings.cancel'), style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+      // Re-enabling: reschedule all habits that have remindMe turned on.
+      await settings.update({ notificationsEnabled: true });
+      scheduleAllReminders(habits);
+    } else {
+      // Disabling: cancel every scheduled notification immediately.
+      await cancelAllReminders();
+      await settings.update({ notificationsEnabled: false });
+    }
+  };
+
+  const handleCalendarToggle = async (value: boolean) => {
+    if (value) {
+      const granted = await requestCalendarPermission();
+      if (!granted) {
+        Alert.alert(
+          t('settings.calendarIntegration'),
+          'Calendar access was denied. Please enable it in Settings → Privacy → Calendars.',
+          [
+            { text: t('settings.cancel'), style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+    }
+    settings.update({ calendarIntegrationEnabled: value });
+  };
+
+  const reminderScheduleLabel = settings.defaultReminderSchedule === 'automatic'
+    ? t('settings.reminderScheduleAutomatic')
+    : t('settings.reminderScheduleCustom');
+
+  const calendarEventTypeLabel =
+    settings.calendarEventType === 'allDay' ? t('settings.calendarAllDay') :
+    settings.calendarEventType === 'automatic' ? t('settings.calendarAutomatic') :
+    t('settings.calendarReminderTime');
 
   const langLabel = language === 'en' ? 'English' : language === 'ar' ? 'العربية' : 'Türkçe';
   const weekLabel = WEEK_DAY_NAMES[settings.weekStartsOn] ?? 'Monday';
@@ -358,6 +439,65 @@ export default function SettingsScreen() {
               Alert.alert(t('settings.notificationsSound'), t('settings.comingSoonBody'))
             }
           />
+        </SectionCard>
+
+        {/* ── Notifications ───────────────────────────────────────────────── */}
+        <SectionHeader label={t('settings.notificationsSection')} />
+        <SectionCard>
+          <SettingRow
+            icon="🔔"
+            iconBg="#FF9800"
+            label={t('settings.notificationsToggle')}
+            hint={notifPermStatus === 'denied' ? t('settings.notificationsDenied') : t('settings.notificationsToggleHint')}
+            isLast={!settings.notificationsEnabled}
+            right={
+              <Switch
+                value={settings.notificationsEnabled}
+                onValueChange={handleNotificationsToggle}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+          />
+          {settings.notificationsEnabled && (
+            <ValueRow
+              icon="⏰"
+              iconBg="#6C63FF"
+              label={t('settings.defaultReminderSchedule')}
+              value={reminderScheduleLabel}
+              isLast
+              onPress={() => setReminderScheduleSheetVisible(true)}
+            />
+          )}
+        </SectionCard>
+
+        {/* ── Calendar & Reminders ────────────────────────────────────────── */}
+        <SectionHeader label={t('settings.calendarIntegration')} />
+        <SectionCard>
+          <SettingRow
+            icon="📅"
+            iconBg="#4CAF50"
+            label={t('settings.calendarEnabled')}
+            isLast={!settings.calendarIntegrationEnabled}
+            right={
+              <Switch
+                value={settings.calendarIntegrationEnabled}
+                onValueChange={handleCalendarToggle}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+            }
+          />
+          {settings.calendarIntegrationEnabled && (
+            <ValueRow
+              icon="🗓"
+              iconBg="#2196F3"
+              label={t('settings.calendarEventType')}
+              value={calendarEventTypeLabel}
+              isLast
+              onPress={() => setCalendarEventTypeSheetVisible(true)}
+            />
+          )}
         </SectionCard>
 
         {/* ── Data ────────────────────────────────────────────────────────── */}
@@ -560,6 +700,112 @@ export default function SettingsScreen() {
               );
             })}
 
+            <View style={{ height: Math.max(insets.bottom, 20) }} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Reminder Schedule picker sheet ──────────────────────────────── */}
+      <Modal
+        visible={reminderScheduleSheetVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setReminderScheduleSheetVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setReminderScheduleSheetVisible(false)} />
+          <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
+            <View style={[s.sheetHeader, { borderBottomColor: theme.colors.border }]}>
+              <View style={{ width: 32 }} />
+              <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>
+                {t('settings.defaultReminderSchedule')}
+              </Text>
+              <Pressable onPress={() => setReminderScheduleSheetVisible(false)} hitSlop={10}>
+                <Text style={[s.sheetClose, { color: theme.colors.textSecondary }]}>✕</Text>
+              </Pressable>
+            </View>
+            {([
+              { value: 'automatic', label: t('settings.reminderScheduleAutomatic'), hint: t('settings.reminderScheduleAutomaticHint') },
+              { value: 'custom', label: t('settings.reminderScheduleCustom'), hint: t('settings.reminderScheduleCustomHint') },
+            ] as { value: ReminderSchedule; label: string; hint: string }[]).map(({ value, label, hint }, idx, arr) => {
+              const active = settings.defaultReminderSchedule === value;
+              const isLast = idx === arr.length - 1;
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => {
+                    settings.update({ defaultReminderSchedule: value });
+                    setReminderScheduleSheetVisible(false);
+                  }}
+                  style={({ pressed }) => [
+                    s.langRow,
+                    !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+                    { opacity: pressed ? 0.7 : 1, alignItems: 'flex-start', paddingVertical: 14 },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.langLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
+                    <Text style={[s.rowHint, { color: theme.colors.textSecondary, marginTop: 2 }]}>{hint}</Text>
+                  </View>
+                  <View style={[s.radio, { marginTop: 2, backgroundColor: active ? theme.colors.primary : 'transparent', borderColor: active ? theme.colors.primary : theme.colors.textDisabled }]}>
+                    {active && <Text style={s.radioCheck}>✓</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
+            <View style={{ height: Math.max(insets.bottom, 20) }} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Calendar Event Type picker sheet ─────────────────────────────── */}
+      <Modal
+        visible={calendarEventTypeSheetVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setCalendarEventTypeSheetVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCalendarEventTypeSheetVisible(false)} />
+          <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
+            <View style={[s.sheetHeader, { borderBottomColor: theme.colors.border }]}>
+              <View style={{ width: 32 }} />
+              <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>
+                {t('settings.calendarEventType')}
+              </Text>
+              <Pressable onPress={() => setCalendarEventTypeSheetVisible(false)} hitSlop={10}>
+                <Text style={[s.sheetClose, { color: theme.colors.textSecondary }]}>✕</Text>
+              </Pressable>
+            </View>
+            {([
+              { value: 'allDay', label: t('settings.calendarAllDay') },
+              { value: 'automatic', label: t('settings.calendarAutomatic') },
+              { value: 'reminderTime', label: t('settings.calendarReminderTime') },
+            ] as { value: CalendarEventType; label: string }[]).map(({ value, label }, idx, arr) => {
+              const active = settings.calendarEventType === value;
+              const isLast = idx === arr.length - 1;
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => {
+                    settings.update({ calendarEventType: value });
+                    setCalendarEventTypeSheetVisible(false);
+                  }}
+                  style={({ pressed }) => [
+                    s.langRow,
+                    !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Text style={[s.langLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
+                  <View style={[s.radio, { backgroundColor: active ? theme.colors.primary : 'transparent', borderColor: active ? theme.colors.primary : theme.colors.textDisabled }]}>
+                    {active && <Text style={s.radioCheck}>✓</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
             <View style={{ height: Math.max(insets.bottom, 20) }} />
           </View>
         </View>

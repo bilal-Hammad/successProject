@@ -15,10 +15,16 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../../src/i18n/LanguageContext';
+import { scheduleHabitReminder } from '../../src/notifications/reminders';
+import { syncHabitCalendarEvents } from '../../src/services/calendarService';
 import { useHabitStore } from '../../src/store/useHabitStore';
 import { useTheme } from '../../src/theme/ThemeContext';
-import type { HabitType } from '../../src/models/types';
+import type { HabitType, RepeatMode } from '../../src/models/types';
 import { generateId } from '../../src/utils/id';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
+
+let DateTimePicker: React.ComponentType<any> | null = null;
+try { DateTimePicker = require('@react-native-community/datetimepicker').default; } catch {}
 
 // ─── Unit categories ──────────────────────────────────────────────────────────
 
@@ -254,6 +260,7 @@ function CalendarPickerModal({
 function Row({
   icon,
   label,
+  hint,
   value,
   onPress,
   rightNode,
@@ -261,6 +268,7 @@ function Row({
 }: {
   icon: string;
   label: string;
+  hint?: string;
   value?: string;
   onPress?: () => void;
   rightNode?: React.ReactNode;
@@ -274,7 +282,10 @@ function Row({
         style={({ pressed }) => [s.row, { opacity: pressed && onPress ? 0.65 : 1 }]}
       >
         <Text style={s.rowIcon}>{icon}</Text>
-        <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[s.rowLabel, { color: theme.colors.textPrimary, flex: 0 }]}>{label}</Text>
+          {hint ? <Text style={[s.rowHint, { color: theme.colors.textSecondary }]}>{hint}</Text> : null}
+        </View>
         {rightNode ?? (
           <View style={s.rowRight}>
             {value !== undefined && (
@@ -299,6 +310,7 @@ export default function NewHabitScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const saveHabit = useHabitStore((s) => s.saveHabit);
+  const { weekStartsOn, defaultReminderSchedule, notificationsEnabled, calendarIntegrationEnabled, calendarEventType } = useSettingsStore();
   const params = useLocalSearchParams<{
     templateId?: string;
     title?: string;
@@ -319,12 +331,21 @@ export default function NewHabitScreen() {
   const [goal, setGoal] = useState(params.goal ? parseInt(params.goal, 10) : 3);
   const [unit, setUnit] = useState(params.unit ? params.unit.charAt(0).toUpperCase() + params.unit.slice(1) : 'Count');
   const [step, setStep] = useState(1);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('daily');
   const [repeatDays, setRepeatDays] = useState<number[]>(ALL_DAYS);
+  const [repeatTimesPerWeek, setRepeatTimesPerWeek] = useState(3);
+  const [repeatIntervalDays, setRepeatIntervalDays] = useState(2);
   const [endsEnabled, setEndsEnabled] = useState(false);
   const [startDate, setStartDate] = useState<string>(() => todayISO());
   const [endDate, setEndDate] = useState<string | null>(null);
   const [calendarFor, setCalendarFor] = useState<'start' | 'end' | null>(null);
-  const [url, setUrl] = useState('');
+  const [remindMe, setRemindMe] = useState(false);
+  const [reminderTime, setReminderTime] = useState('09:00');
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [tempReminderDate, setTempReminderDate] = useState<Date>(() => {
+    const d = new Date(); d.setHours(9, 0, 0, 0); return d;
+  });
+
 
   // ── Modal visibility ────────────────────────────────────────────────────────
   const [showColor, setShowColor] = useState(false);
@@ -332,7 +353,7 @@ export default function NewHabitScreen() {
   const [showDesc, setShowDesc] = useState(false);
 const [showGoal, setShowGoal] = useState(false);
   const [showRepeat, setShowRepeat] = useState(false);
-  const [showUrl, setShowUrl] = useState(false);
+
 
   // ── Goal sub-state ──────────────────────────────────────────────────────────
   const [showUnitPicker, setShowUnitPicker] = useState(false);
@@ -343,16 +364,24 @@ const [showGoal, setShowGoal] = useState(false);
 
   // ── Other temp state ────────────────────────────────────────────────────────
   const [tempDesc, setTempDesc] = useState('');
-  const [tempUrl, setTempUrl] = useState('');
+
 
   // ── Derived ─────────────────────────────────────────────────────────────────
-  const repeatLabel = repeatDays.length === 7
-    ? t('form.everyDay')
-    : repeatDays.length === 0
-    ? t('form.never')
-    : t('form.daysPerWeek', { count: repeatDays.length });
+  const orderedDays = Array.from({ length: 7 }, (_, i) => (weekStartsOn + i) % 7);
 
-const toggleDay = (d: number) =>
+  const repeatLabel =
+    repeatMode === 'daily' ? t('form.everyDay') :
+    repeatMode === 'specificDays' ? (repeatDays.length === 7 ? t('form.everyDay') : repeatDays.length === 0 ? t('form.never') : t('form.daysPerWeek', { count: repeatDays.length })) :
+    repeatMode === 'timesPerWeek' ? t('repeat.timesPerWeekValue', { count: repeatTimesPerWeek }) :
+    t('repeat.everyXDaysValue', { count: repeatIntervalDays });
+
+  const repeatSummary =
+    repeatMode === 'daily' ? t('repeat.summaryEveryDay') :
+    repeatMode === 'specificDays' ? (repeatDays.length === 0 ? t('form.selectDaysMsg') : t('repeat.summaryOn', { days: orderedDays.filter(d => repeatDays.includes(d)).map(d => t(`day.${d}`)).join(', ') })) :
+    repeatMode === 'timesPerWeek' ? t('repeat.summaryTimesPerWeek', { count: repeatTimesPerWeek }) :
+    t('repeat.summaryEveryXDays', { count: repeatIntervalDays });
+
+  const toggleDay = (d: number) =>
     setRepeatDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
 
   const adjustGoal = (delta: number) =>
@@ -412,13 +441,16 @@ const toggleDay = (d: number) =>
     if (!trimmed) { Alert.alert(t('form.nameRequired'), t('form.nameRequiredMsg')); return; }
     setSaving(true);
     const isCountingHabit = habitType === 'track' || (habitType === 'todo' && goal > 1) || (habitType === 'good' && goal > 1);
-    await saveHabit({
-      id: generateId(),
+    const habitId = generateId();
+    const newHabit = {
+      id: habitId,
       title: trimmed,
       icon,
       color,
       pointsPerCompletion: 10,
-      scheduleDays: repeatDays.length > 0 ? repeatDays : ALL_DAYS,
+      scheduleDays: repeatMode === 'everyXDays' ? [] : repeatMode === 'timesPerWeek' ? ALL_DAYS : repeatDays.length > 0 ? repeatDays : ALL_DAYS,
+      weeklyTarget: repeatMode === 'timesPerWeek' ? repeatTimesPerWeek : undefined,
+      intervalDays: repeatMode === 'everyXDays' ? repeatIntervalDays : undefined,
       templateId: params.templateId,
       dailyTarget: isCountingHabit ? goal : undefined,
       unit: isCountingHabit ? unit : undefined,
@@ -430,11 +462,28 @@ const toggleDay = (d: number) =>
       startDate,
       endDate: endsEnabled && endDate ? endDate : undefined,
       healthKitType: params.healthKitType,
-    });
+      remindMe: notificationsEnabled ? remindMe : false,
+      reminderTime: notificationsEnabled && remindMe && defaultReminderSchedule === 'custom' ? reminderTime : undefined,
+    };
+    await saveHabit(newHabit);
+
+    // Schedule notifications and calendar events, then save IDs back.
+    const [notifIds, calIds] = await Promise.all([
+      notificationsEnabled && remindMe ? scheduleHabitReminder(newHabit) : Promise.resolve([] as string[]),
+      calendarIntegrationEnabled ? syncHabitCalendarEvents(newHabit, calendarEventType, true) : Promise.resolve([] as string[]),
+    ]);
+    if (notifIds.length > 0 || calIds.length > 0) {
+      await saveHabit({
+        ...newHabit,
+        notificationIds: notifIds.length > 0 ? notifIds : undefined,
+        calendarEventIds: calIds.length > 0 ? calIds : undefined,
+      });
+    }
+
     router.navigate('/');
   };
 
-  const previewSubtitle = habitType === 'todo' ? t('form.previewTodo') : repeatDays.length === 7 ? `${t('form.everyDay')}, ${goal}` : `${repeatLabel}, ${goal}`;
+  const previewSubtitle = habitType === 'todo' ? t('form.previewTodo') : `${repeatLabel}, ${goal}`;
 
   return (
     <View style={[s.screen, { backgroundColor: theme.colors.background }]}>
@@ -499,9 +548,44 @@ const toggleDay = (d: number) =>
         <Text style={[s.sectionLabel, { color: theme.colors.textSecondary }]}>{t('settings.general')}</Text>
         <View style={[s.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <Row icon="🚩" label={t('form.goal')} value={`${goal}`} onPress={openGoal} />
-          <Row icon="🔁" label={t('form.repeat')} value={repeatLabel} onPress={() => setShowRepeat(true)} />
-          <Row icon="🔔" label={t('form.notifications')} value={t('form.automatic')} onPress={() => {}} />
-          <Row icon="🔗" label={t('form.url')} value={url || t('form.none')} onPress={() => { setTempUrl(url); setShowUrl(true); }} />
+          {habitType !== 'todo' && (
+            <Row icon="🔁" label={t('form.repeat')} value={repeatLabel} onPress={() => setShowRepeat(true)} />
+          )}
+          {notificationsEnabled && (
+            <>
+              <Row
+                icon="🔔"
+                label={t('form.remindMe')}
+                hint={t('form.remindMeHint')}
+                rightNode={
+                  <Switch
+                    value={remindMe}
+                    onValueChange={setRemindMe}
+                    trackColor={{ false: theme.colors.border, true: color }}
+                    thumbColor="#fff"
+                  />
+                }
+              />
+              {remindMe && defaultReminderSchedule === 'custom' && (
+                <Row
+                  icon="⏰"
+                  label={t('form.reminderTimeLabel')}
+                  onPress={() => {
+                    const [h, m] = reminderTime.split(':');
+                    const d = new Date(); d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+                    setTempReminderDate(d);
+                    setShowTimePicker(true);
+                  }}
+                  rightNode={
+                    <View style={s.rowRight}>
+                      <Text style={[s.rowValue, { color: theme.colors.textSecondary }]}>{reminderTime}</Text>
+                      <Text style={[s.chevron, { color: theme.colors.textSecondary }]}>›</Text>
+                    </View>
+                  }
+                />
+              )}
+            </>
+          )}
           {/* Starts on */}
           <Row
             icon="📅"
@@ -779,46 +863,118 @@ const toggleDay = (d: number) =>
           <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
             <View style={s.handle} />
             <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.repeat')}</Text>
-            <Text style={[s.repeatSectionLabel, { color: theme.colors.textSecondary }]}>{t('form.goalFrequency')}</Text>
-            <View style={s.daysRow}>
-              {ALL_DAYS.map((d) => (
-                <Pressable key={d} onPress={() => toggleDay(d)}
-                  style={[s.dayCircle, repeatDays.includes(d) ? { backgroundColor: color } : { backgroundColor: theme.colors.surfaceRaised }]}>
-                  <Text style={[s.dayLabel, { color: repeatDays.includes(d) ? '#fff' : theme.colors.textSecondary }]}>
-                    {t(`day.${d}`)}
+
+            {/* 4 mode options */}
+            {(['daily', 'specificDays', 'timesPerWeek', 'everyXDays'] as const).map((mode) => {
+              const labels: Record<RepeatMode, string> = {
+                daily: t('form.everyDay'),
+                specificDays: t('form.specificDays'),
+                timesPerWeek: t('form.timesPerWeek'),
+                everyXDays: t('repeat.everyXDays'),
+              };
+              const active = repeatMode === mode;
+              return (
+                <Pressable key={mode} onPress={() => setRepeatMode(mode)} style={s.modeRow}>
+                  <View style={[s.radioOuter, { borderColor: active ? color : theme.colors.border }]}>
+                    {active && <View style={[s.radioInner, { backgroundColor: color }]} />}
+                  </View>
+                  <Text style={[s.modeLabel, { color: active ? theme.colors.textPrimary : theme.colors.textSecondary }]}>
+                    {labels[mode]}
                   </Text>
                 </Pressable>
-              ))}
-            </View>
-            <Pressable onPress={() => setShowRepeat(false)} style={[s.doneBtn, { backgroundColor: color, marginTop: 24 }]}>
+              );
+            })}
+
+            {/* Sub-control for selected mode */}
+            {repeatMode === 'specificDays' && (
+              <View style={[s.daysRow, { marginTop: 16 }]}>
+                {orderedDays.map((d) => (
+                  <Pressable key={d} onPress={() => toggleDay(d)}
+                    style={[s.dayCircle, repeatDays.includes(d) ? { backgroundColor: color } : { backgroundColor: theme.colors.surfaceRaised }]}>
+                    <Text style={[s.dayLabel, { color: repeatDays.includes(d) ? '#fff' : theme.colors.textSecondary }]}>
+                      {t(`day.${d}`)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {repeatMode === 'timesPerWeek' && (
+              <View style={[s.repeatStepperRow, { marginTop: 16 }]}>
+                <Pressable onPress={() => setRepeatTimesPerWeek((v) => Math.max(1, v - 1))}
+                  style={[s.repeatStepBtn, { backgroundColor: color }]}>
+                  <Text style={s.repeatStepBtnText}>−</Text>
+                </Pressable>
+                <Text style={[s.repeatStepValue, { color: theme.colors.textPrimary }]}>{repeatTimesPerWeek}</Text>
+                <Pressable onPress={() => setRepeatTimesPerWeek((v) => Math.min(7, v + 1))}
+                  style={[s.repeatStepBtn, { backgroundColor: color }]}>
+                  <Text style={s.repeatStepBtnText}>+</Text>
+                </Pressable>
+              </View>
+            )}
+            {repeatMode === 'everyXDays' && (
+              <View style={[s.repeatStepperRow, { marginTop: 16 }]}>
+                <Pressable onPress={() => setRepeatIntervalDays((v) => Math.max(2, v - 1))}
+                  style={[s.repeatStepBtn, { backgroundColor: color }]}>
+                  <Text style={s.repeatStepBtnText}>−</Text>
+                </Pressable>
+                <Text style={[s.repeatStepValue, { color: theme.colors.textPrimary }]}>{repeatIntervalDays}</Text>
+                <Pressable onPress={() => setRepeatIntervalDays((v) => Math.min(30, v + 1))}
+                  style={[s.repeatStepBtn, { backgroundColor: color }]}>
+                  <Text style={s.repeatStepBtnText}>+</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Live summary */}
+            <Text style={[s.repeatSummary, { color: theme.colors.textSecondary }]}>{repeatSummary}</Text>
+
+            <Pressable onPress={() => setShowRepeat(false)} style={[s.doneBtn, { backgroundColor: color, marginTop: 16 }]}>
               <Text style={s.doneBtnText}>{t('form.done')}</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
 
-      {/* ── URL ──────────────────────────────────────────────────────────── */}
-      <Modal visible={showUrl} transparent animationType="slide" onRequestClose={() => setShowUrl(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.sheetWrap}>
-          <Pressable style={s.overlay} onPress={() => setShowUrl(false)} />
+      {/* ── Reminder Time picker ──────────────────────────────────────────── */}
+      <Modal
+        visible={showTimePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTimePicker(false)}
+      >
+        <View style={[s.sheetWrap, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+          <Pressable style={s.overlay} onPress={() => setShowTimePicker(false)} />
           <View style={[s.sheet, { backgroundColor: theme.colors.surface }]}>
             <View style={s.handle} />
-            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.url')}</Text>
-            <View style={[s.textBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-              <TextInput value={tempUrl} onChangeText={setTempUrl} placeholder={t('form.url')}
-                placeholderTextColor={theme.colors.textSecondary}
-                style={[s.textBoxInput, { color: theme.colors.textPrimary }]}
-                autoCapitalize="none" keyboardType="url" autoFocus />
-            </View>
-            <Text style={[s.hint, { color: theme.colors.textSecondary }]}>
-              {t('form.urlHint')}
-            </Text>
-            <Pressable onPress={() => { setUrl(tempUrl); setShowUrl(false); }}
-              style={[s.doneBtn, { backgroundColor: color }]}>
+            <Text style={[s.sheetTitle, { color: theme.colors.textPrimary }]}>{t('form.reminderTimeLabel')}</Text>
+            {DateTimePicker ? (
+              <DateTimePicker
+                value={tempReminderDate}
+                mode="time"
+                display="spinner"
+                is24Hour={false}
+                onChange={(_: any, date?: Date) => { if (date) setTempReminderDate(date); }}
+                style={{ backgroundColor: theme.colors.surface, height: 180 }}
+                textColor={theme.mode === 'dark' ? '#fff' : '#000'}
+              />
+            ) : (
+              <Text style={[s.hint, { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 20 }]}>
+                Time picker requires a dev build.
+              </Text>
+            )}
+            <Pressable
+              onPress={() => {
+                const h = String(tempReminderDate.getHours()).padStart(2, '0');
+                const m = String(tempReminderDate.getMinutes()).padStart(2, '0');
+                setReminderTime(`${h}:${m}`);
+                setShowTimePicker(false);
+              }}
+              style={[s.doneBtn, { backgroundColor: color, marginTop: 8 }]}
+            >
               <Text style={s.doneBtnText}>{t('form.done')}</Text>
             </Pressable>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* ── Date picker modal (shared for start + end) ────────────────────── */}
@@ -891,6 +1047,7 @@ const s = StyleSheet.create({
   },
   rowIcon: { fontSize: 20, width: 28, textAlign: 'center' },
   rowLabel: { flex: 1, fontSize: 15 },
+  rowHint: { fontSize: 12, lineHeight: 16 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rowValue: { fontSize: 15 },
   chevron: { fontSize: 20 },
@@ -972,10 +1129,18 @@ const s = StyleSheet.create({
   unitSearchInput: { flex: 1, fontSize: 15, padding: 0 },
 
   // Repeat
-  repeatSectionLabel: { fontSize: 13, fontWeight: '600', marginBottom: 14 },
+  modeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: 12 },
+  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioInner: { width: 10, height: 10, borderRadius: 5 },
+  modeLabel: { fontSize: 15, fontWeight: '500' },
   daysRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  dayCircle: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  dayLabel: { fontSize: 13, fontWeight: '600' },
+  dayCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  dayLabel: { fontSize: 12, fontWeight: '700' },
+  repeatStepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
+  repeatStepBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  repeatStepBtnText: { color: '#fff', fontSize: 22, lineHeight: 26, fontWeight: '600' },
+  repeatStepValue: { fontSize: 28, fontWeight: '700', minWidth: 40, textAlign: 'center' },
+  repeatSummary: { fontSize: 13, textAlign: 'center', marginTop: 14, marginBottom: 4, fontStyle: 'italic' },
 });
 
 // ─── Floating calendar modal styles ──────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import type { Habit } from '../models/types';
-import { isHealthKitAvailable, readTodayValue } from '../services/HealthKitService';
+import { isHealthKitAvailable, initForHabits, readTodayValue } from '../services/HealthKitService';
 
 type LogCount = (habitId: string, date: string, count: number) => void;
 
@@ -21,18 +21,29 @@ export function useHealthKitSync(
     lastSyncRef.current = now;
 
     const linked = habits.filter((h) => !!h.healthKitType && !h.archived);
+    if (linked.length === 0) return;
+
+    console.log('[FORGE] HealthKit: syncing', linked.length, 'linked habits for', date);
+
+    // initHealthKit must be called before any reads. It shows the permission sheet
+    // on first launch and is a no-op (fast) for subsequent calls.
+    await initForHabits(linked.map((h) => h.healthKitType!));
+
     await Promise.all(
       linked.map(async (habit) => {
         try {
           const value = await readTodayValue(habit.healthKitType!);
+          console.log(`[FORGE] HealthKit: ${habit.healthKitType} → value=${value} (habit "${habit.id}")`);
           if (value > 0) {
             logCount(habit.id, date, value);
           }
-        } catch {
-          // ignore individual errors
+        } catch (e) {
+          console.log(`[FORGE] HealthKit: readTodayValue threw for ${habit.healthKitType}:`, e);
         }
       }),
     );
+
+    console.log('[FORGE] HealthKit: sync complete');
   };
 
   // Sync on mount

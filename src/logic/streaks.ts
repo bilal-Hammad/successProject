@@ -9,6 +9,7 @@ export function currentStreak(
   weekStartsOn: WeekStart = 1,
 ): number {
   if (habit.weeklyTarget) return currentWeeklyStreak(habit, completions, weekStartsOn);
+  if (habit.intervalDays) return currentIntervalStreak(habit, completions);
 
   let streak = 0;
   let cursor = dayjs().startOf('day');
@@ -67,12 +68,44 @@ function currentWeeklyStreak(
   return streak;
 }
 
+function currentIntervalStreak(habit: Habit, completions: Completion[]): number {
+  const startDay = dayjs(habit.startDate ?? dayjs(habit.createdAt).format('YYYY-MM-DD'));
+  const today = dayjs().startOf('day');
+  let streak = 0;
+  let cursor = today;
+
+  while (true) {
+    const diff = cursor.diff(startDay, 'day');
+    if (diff < 0) break;
+
+    if (diff % habit.intervalDays! !== 0) {
+      cursor = cursor.subtract(1, 'day');
+      continue;
+    }
+
+    const dateStr = cursor.format('YYYY-MM-DD');
+    if (isHabitDone(habit, completions, dateStr)) {
+      streak++;
+      cursor = cursor.subtract(1, 'day');
+    } else if (cursor.isSame(today)) {
+      cursor = cursor.subtract(1, 'day');
+    } else {
+      break;
+    }
+
+    if (streak > 365) break;
+  }
+
+  return streak;
+}
+
 export function longestStreak(
   habit: Habit,
   completions: Completion[],
   weekStartsOn: WeekStart = 1,
 ): number {
   if (habit.weeklyTarget) return longestWeeklyStreak(habit, completions, weekStartsOn);
+  if (habit.intervalDays) return longestIntervalStreak(habit, completions);
 
   const doneDates = completions
     .filter((c) => c.habitId === habit.id && isHabitDone(habit, completions, c.date))
@@ -136,6 +169,30 @@ function longestWeeklyStreak(
     }
 
     weekStart = weekStart.add(7, 'day');
+  }
+
+  return best;
+}
+
+function longestIntervalStreak(habit: Habit, completions: Completion[]): number {
+  const startDay = dayjs(habit.startDate ?? dayjs(habit.createdAt).format('YYYY-MM-DD'));
+  const today = dayjs().startOf('day');
+  let best = 0;
+  let current = 0;
+  let cursor = startDay;
+
+  while (!cursor.isAfter(today)) {
+    const diff = cursor.diff(startDay, 'day');
+    if (diff % habit.intervalDays! === 0) {
+      const dateStr = cursor.format('YYYY-MM-DD');
+      if (isHabitDone(habit, completions, dateStr)) {
+        current++;
+        best = Math.max(best, current);
+      } else if (!cursor.isSame(today)) {
+        current = 0;
+      }
+    }
+    cursor = cursor.add(1, 'day');
   }
 
   return best;
