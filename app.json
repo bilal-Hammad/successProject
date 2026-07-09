@@ -36,7 +36,7 @@
       "expo-router",
       "expo-apple-authentication",
       "expo-calendar",
-      ["react-native-health", { "isClinicalDataEnabled": false }],
+      "@kingstinct/react-native-healthkit",
       [
         "expo-splash-screen",
         {
