@@ -1,5 +1,5 @@
 /**
- * Momentum — Theme Context
+ * Forge — Theme Context
  *
  * Single source of truth for the current theme. Components import
  * useTheme() from this file (in Stage 2); the old useTheme.ts stays
@@ -24,6 +24,7 @@ import React, {
 import { useColorScheme } from 'react-native';
 import { ACCENT_COLORS, useSettingsStore } from '../store/useSettingsStore';
 import { darkTokens, lightTokens, type ColorTokens } from './tokens';
+import { migrateStorageKey } from '../utils/migrateStorageKey';
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -80,7 +81,8 @@ export type Theme = {
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = '@momentum/theme_mode';
+const STORAGE_KEY = '@forge/theme_mode';
+const STORAGE_KEY_LEGACY = '@momentum/theme_mode';
 
 const ThemeContext = createContext<Theme>({
   colors: lightTokens,
@@ -107,7 +109,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Hydrate persisted preference on mount
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
+    migrateStorageKey(STORAGE_KEY_LEGACY, STORAGE_KEY)
       .then((stored) => {
         if (stored === 'light' || stored === 'dark' || stored === 'system') {
           setModeState(stored as ThemeMode);

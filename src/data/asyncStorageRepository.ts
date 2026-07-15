@@ -1,12 +1,26 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Completion, Habit } from '../models/types';
 import type { HabitRepository } from './repository';
+import { migrateStorageKey } from '../utils/migrateStorageKey';
 
-const HABITS_KEY = '@momentum/habits';
-const COMPLETIONS_KEY = '@momentum/completions';
+const HABITS_KEY = '@forge/habits';
+const HABITS_KEY_LEGACY = '@momentum/habits';
+const COMPLETIONS_KEY = '@forge/completions';
+const COMPLETIONS_KEY_LEGACY = '@momentum/completions';
+
+let migrated = false;
+async function ensureMigrated(): Promise<void> {
+  if (migrated) return;
+  await Promise.all([
+    migrateStorageKey(HABITS_KEY_LEGACY, HABITS_KEY),
+    migrateStorageKey(COMPLETIONS_KEY_LEGACY, COMPLETIONS_KEY),
+  ]);
+  migrated = true;
+}
 
 export class AsyncStorageRepository implements HabitRepository {
   async getHabits(): Promise<Habit[]> {
+    await ensureMigrated();
     const raw = await AsyncStorage.getItem(HABITS_KEY);
     return raw ? JSON.parse(raw) : [];
   }
@@ -31,6 +45,7 @@ export class AsyncStorageRepository implements HabitRepository {
   }
 
   async getCompletions(): Promise<Completion[]> {
+    await ensureMigrated();
     const raw = await AsyncStorage.getItem(COMPLETIONS_KEY);
     return raw ? JSON.parse(raw) : [];
   }

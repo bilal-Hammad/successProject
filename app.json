@@ -1,14 +1,17 @@
 {
   "expo": {
     "name": "Forge",
-    "slug": "momentum",
+    "slug": "forge",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "momentum",
+    "scheme": [
+      "momentum",
+      "forge"
+    ],
     "userInterfaceStyle": "automatic",
     "icon": "./assets/logo.png",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "buildNumber": "2",
       "bundleIdentifier": "com.bilalhammad.forge",
       "icon": "./assets/logo.png",
@@ -22,11 +25,13 @@
       "entitlements": {
         "com.apple.developer.healthkit": true,
         "com.apple.developer.healthkit.access": [],
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       }
     },
     "android": {
-      "package": "com.momentum.app"
+      "package": "com.bilalhammad.forge"
     },
     "web": {
       "bundler": "metro",
@@ -43,6 +48,15 @@
           "image": "./assets/splash.png",
           "backgroundColor": "#161311",
           "resizeMode": "contain"
+        }
+      ],
+      "./plugins/withExpoWidgetsDeviceFamily",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.bilalhammad.forge.HabitTimerActivity",
+          "groupIdentifier": "group.com.bilalhammad.forge",
+          "widgets": []
         }
       ]
     ],

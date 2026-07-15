@@ -143,6 +143,11 @@ export default function TemplatesScreen() {
         habitType: template.habitType ?? 'good',
         ...(template.unit ? { unit: template.unit } : {}),
         ...(template.defaultGoal ? { goal: String(template.defaultGoal) } : {}),
+        ...(template.step ? { step: String(template.step) } : {}),
+        ...(template.repeatMode ? { repeatMode: template.repeatMode } : {}),
+        ...(template.scheduleDays ? { scheduleDays: template.scheduleDays.join(',') } : {}),
+        ...(template.weeklyTarget ? { weeklyTarget: String(template.weeklyTarget) } : {}),
+        ...(template.intervalDays ? { intervalDays: String(template.intervalDays) } : {}),
       },
     });
   };

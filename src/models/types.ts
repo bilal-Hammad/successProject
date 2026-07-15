@@ -77,4 +77,9 @@ export type HabitTemplate = {
   unit?: string;
   defaultGoal?: number;
   healthKitType?: string;
+  step?: number;             // increment step for counting/todo habits (default 1)
+  repeatMode?: RepeatMode;
+  scheduleDays?: number[];   // 0=Sun … 6=Sat, default all
+  weeklyTarget?: number;     // if set, habit recurs any day; done when total completions this week >= weeklyTarget
+  intervalDays?: number;     // "every N days" mode: due when (date - startDate) % intervalDays === 0
 };

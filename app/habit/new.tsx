@@ -320,6 +320,11 @@ export default function NewHabitScreen() {
     unit?: string;
     goal?: string;
     healthKitType?: string;
+    step?: string;
+    repeatMode?: string;
+    scheduleDays?: string;
+    weeklyTarget?: string;
+    intervalDays?: string;
   }>();
 
   // ── Form state ──────────────────────────────────────────────────────────────
@@ -330,11 +335,13 @@ export default function NewHabitScreen() {
   const [habitType, setHabitType] = useState<HabitType>((params.habitType as HabitType) ?? 'good');
   const [goal, setGoal] = useState(params.goal ? parseInt(params.goal, 10) : 3);
   const [unit, setUnit] = useState(params.unit ? params.unit.charAt(0).toUpperCase() + params.unit.slice(1) : 'Count');
-  const [step, setStep] = useState(1);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('daily');
-  const [repeatDays, setRepeatDays] = useState<number[]>(ALL_DAYS);
-  const [repeatTimesPerWeek, setRepeatTimesPerWeek] = useState(3);
-  const [repeatIntervalDays, setRepeatIntervalDays] = useState(2);
+  const [step, setStep] = useState(params.step ? parseInt(params.step, 10) : 1);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>((params.repeatMode as RepeatMode) ?? 'daily');
+  const [repeatDays, setRepeatDays] = useState<number[]>(
+    params.scheduleDays ? params.scheduleDays.split(',').map(Number) : ALL_DAYS
+  );
+  const [repeatTimesPerWeek, setRepeatTimesPerWeek] = useState(params.weeklyTarget ? parseInt(params.weeklyTarget, 10) : 3);
+  const [repeatIntervalDays, setRepeatIntervalDays] = useState(params.intervalDays ? parseInt(params.intervalDays, 10) : 2);
   const [endsEnabled, setEndsEnabled] = useState(false);
   const [startDate, setStartDate] = useState<string>(() => todayISO());
   const [endDate, setEndDate] = useState<string | null>(null);

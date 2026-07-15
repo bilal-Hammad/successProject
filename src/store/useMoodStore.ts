@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import type { MoodEntry, MoodValue } from '../models/types';
+import { migrateStorageKey } from '../utils/migrateStorageKey';
 
-const MOODS_KEY = '@momentum/moods';
+const MOODS_KEY = '@forge/moods';
+const MOODS_KEY_LEGACY = '@momentum/moods';
 
 // Maps 0–100 continuous value to the legacy 7-bucket MoodValue.
 // The 7 zones are equal-width (100/7 ≈ 14.286 each).
@@ -30,7 +32,7 @@ export const useMoodStore = create<MoodStore>((set, get) => ({
   moods: [],
 
   hydrate: async () => {
-    const raw = await AsyncStorage.getItem(MOODS_KEY);
+    const raw = await migrateStorageKey(MOODS_KEY_LEGACY, MOODS_KEY);
     set({ moods: raw ? JSON.parse(raw) : [] });
   },
 

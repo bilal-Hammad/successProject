@@ -1,5 +1,5 @@
 -- ============================================================
--- Momentum – Template Section Management Schema
+-- Forge – Template Section Management Schema
 -- Run this in the Supabase SQL editor (project > SQL Editor)
 -- ============================================================
 

@@ -1,4 +1,4 @@
-# Momentum – Claude Code Project Guide
+# Forge – Claude Code Project Guide
 
 ## Stack
 - **Expo SDK 56** · React Native 0.85.3 · Hermes · **Expo Router** (file-based, typed routes)

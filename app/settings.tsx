@@ -24,6 +24,7 @@ import {
   cancelAllReminders,
 } from '../src/notifications/reminders';
 import { requestCalendarPermission } from '../src/services/calendarService';
+import { clearAnyActiveTimerSession } from '../src/data/activeTimerSession';
 import { useHabitStore } from '../src/store/useHabitStore';
 import { useSettingsStore, type ReminderSchedule, type CalendarEventType } from '../src/store/useSettingsStore';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -209,7 +210,7 @@ export default function SettingsScreen() {
       const payload = JSON.stringify({ habits, completions }, null, 2);
       await Share.share({
         message: payload,
-        title: 'Momentum Export',
+        title: 'Forge Export',
       });
     } catch {}
   };
@@ -224,7 +225,7 @@ export default function SettingsScreen() {
           text: t('settings.confirm'),
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem('@momentum/completions');
+            await AsyncStorage.multiRemove(['@forge/completions', '@momentum/completions']);
             await useHabitStore.getState().hydrate();
           },
         },
@@ -242,7 +243,13 @@ export default function SettingsScreen() {
           text: t('settings.confirm'),
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.multiRemove(['@momentum/habits', '@momentum/completions']);
+            await AsyncStorage.multiRemove([
+              '@forge/habits', '@forge/completions',
+              '@momentum/habits', '@momentum/completions',
+            ]);
+            // Any active timer session is guaranteed orphaned once every
+            // habit is gone, regardless of which habit it belonged to.
+            await clearAnyActiveTimerSession().catch(() => {});
             await useHabitStore.getState().hydrate();
           },
         },
@@ -251,14 +258,14 @@ export default function SettingsScreen() {
   };
 
   const handleGetSupport = () => {
-    Linking.openURL('mailto:support@momentum-app.com?subject=Momentum Support');
+    Linking.openURL('mailto:support@forge-app.com?subject=Forge Support');
   };
 
   const handleShareApp = async () => {
     try {
       await Share.share({
         message: t('settings.shareMessage'),
-        title: 'Momentum',
+        title: 'Forge',
       });
     } catch {}
   };

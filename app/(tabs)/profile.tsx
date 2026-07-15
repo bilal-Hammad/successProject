@@ -104,7 +104,7 @@ export default function ProfileScreen() {
         <View style={styles.brand}>
           <Text style={styles.brandIcon}>🎯</Text>
           <Text style={[styles.brandName, { color: theme.colors.textPrimary }]}>
-            Momentum
+            Forge
           </Text>
           <Text style={[styles.brandTagline, { color: theme.colors.textSecondary }]}>
             {t('profile.tagline')}

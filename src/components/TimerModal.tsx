@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   AppState,
   Dimensions,
   Modal,
@@ -11,7 +12,19 @@ import {
 import Svg, { Circle, Line } from 'react-native-svg';
 import type { Habit } from '../models/types';
 import { AddNoteModal } from './AddNoteModal';
-import { startLiveActivity, updateLiveActivity, endLiveActivity } from '../modules/HabitLiveActivity';
+import { useLanguage } from '../i18n/LanguageContext';
+import {
+  startHabitTimerActivity,
+  pauseHabitTimerActivity,
+  resumeHabitTimerActivity,
+  endHabitTimerActivity,
+} from '../modules/HabitLiveActivity';
+import {
+  saveActiveTimerSession,
+  clearActiveTimerSession,
+  getActiveTimerSession,
+  getValidActiveTimerSession,
+} from '../data/activeTimerSession';
 
 const SCREEN_W = Dimensions.get('window').width;
 const RING_SIZE = Math.min(SCREEN_W * 0.62, 248);
@@ -153,6 +166,7 @@ type Props = {
 };
 
 export function TimerModal({ visible, habit, elapsed, date, onClose, onElapsedChange }: Props) {
+  const { t } = useLanguage();
   const [localElapsed, setLocalElapsed] = useState(elapsed);
   const [isRunning, setIsRunning] = useState(false);
   const [noteVisible, setNoteVisible] = useState(false);
@@ -160,12 +174,87 @@ export function TimerModal({ visible, habit, elapsed, date, onClose, onElapsedCh
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const startAtRef = useRef(0);
   const bgTimeRef = useRef(0);
-  const activityIdRef = useRef<string | null>(null);
+  // Current end-of-timer date shown on the Live Activity — shifts forward on
+  // each resume by the paused duration (see resumeHabitTimerActivity).
+  const endDateRef = useRef<Date | null>(null);
+  // Set while paused; used on resume to compute how long the pause lasted.
+  const pausedAtRef = useRef<Date | null>(null);
+  // Which habit's session endDateRef/pausedAtRef/intervalRef currently
+  // describe. This component instance is reused across different habits
+  // (the modal is always mounted, just toggled via `visible`), so this is
+  // what lets us tell "these refs are stale, they're from a different habit"
+  // apart from "these refs are this habit's still-active session."
+  const activeHabitIdRef = useRef<string | null>(null);
+  // Guards against a second concurrent reconciliation read if the modal's
+  // visible prop were to toggle again before the first read resolves.
+  const reconcilingRef = useRef(false);
 
-  // Sync from prop only when modal opens (never while timer is running)
+  // On open: if this component instance is already tracking an active session
+  // for this exact habit (activeHabitIdRef matches — e.g. the modal was simply
+  // closed and reopened without the app ever backgrounding, so the interval
+  // never stopped), there's nothing to reconstruct; existing state already
+  // reflects reality.
+  //
+  // If the refs instead describe a *different* habit (its timer is still
+  // running in the background — this modal instance is shared across habits),
+  // detach from it locally without touching its actual session or Live
+  // Activity, which keeps going untouched.
+  //
+  // Then check the persisted session (Step 5) for one belonging to *this*
+  // habit and rebuild UI state from it — this is the case where the app was
+  // backgrounded/killed and relaunched while this habit's timer kept running
+  // via its Live Activity. If no matching session exists, fall back to the
+  // original behavior of just syncing from the elapsed prop.
   useEffect(() => {
-    if (visible) setLocalElapsed(elapsed);
-  }, [visible]); // intentionally omit elapsed — only sync on open
+    if (!visible || !habit) return;
+    if (activeHabitIdRef.current === habit.id) return;
+
+    if (activeHabitIdRef.current !== null) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      endDateRef.current = null;
+      pausedAtRef.current = null;
+      activeHabitIdRef.current = null;
+      setIsRunning(false);
+    }
+
+    if (reconcilingRef.current) return;
+    reconcilingRef.current = true;
+    setLocalElapsed(elapsed); // synchronous default while the async check below runs
+
+    let cancelled = false;
+    getActiveTimerSession()
+      .then((session) => {
+        if (cancelled) return;
+        if (!session || session.habitId !== habit.id) return; // already defaulted above
+
+        activeHabitIdRef.current = habit.id;
+        endDateRef.current = new Date(session.endDate);
+
+        if (session.isPaused && session.pausedAt != null) {
+          pausedAtRef.current = new Date(session.pausedAt);
+          const elapsedAtPause = Math.floor((session.pausedAt - session.startedAt) / 1000);
+          setLocalElapsed(Math.min(Math.max(elapsedAtPause, 0), session.goalSeconds));
+          setIsRunning(false);
+        } else {
+          pausedAtRef.current = null;
+          startAtRef.current = session.startedAt;
+          const currentElapsed = Math.floor((Date.now() - session.startedAt) / 1000);
+          setLocalElapsed(Math.min(Math.max(currentElapsed, 0), session.goalSeconds));
+          setIsRunning(true);
+          intervalRef.current = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - startAtRef.current) / 1000);
+            setLocalElapsed(elapsed);
+          }, 1000);
+        }
+      })
+      .finally(() => {
+        reconcilingRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, habit?.id]); // intentionally omit elapsed — only sync on open
 
   // AppState: keep timer running in background
   useEffect(() => {
@@ -181,47 +270,159 @@ export function TimerModal({ visible, habit, elapsed, date, onClose, onElapsedCh
     return () => sub.remove();
   }, [isRunning]);
 
-  // Stop timer when modal closes
-  useEffect(() => {
-    if (!visible) stopTimer();
-  }, [visible]);
+  const startTimer = async () => {
+    console.log('[FORGE] TIMER BUTTON TAPPED');
+    try {
+      if (!habit) {
+        console.log('[FORGE] startTimer: habit is null/undefined — bailing before any Live Activity logic');
+        return;
+      }
 
-  const startTimer = () => {
-    setIsRunning(true);
-    startAtRef.current = Date.now() - localElapsed * 1000;
-    if (habit) {
-      startLiveActivity({
-        habitName: habit.title,
-        habitIcon: habit.icon ?? '⏱',
-        goalMinutes: habit.dailyTarget ?? 30,
-        habitColor: habit.color,
-      }).then((id) => {
-        activityIdRef.current = id;
-      });
+      const isResumingOwnSession =
+        activeHabitIdRef.current === habit.id && pausedAtRef.current && endDateRef.current;
+      console.log(
+        '[FORGE] startTimer: habit =', habit.id, habit.title,
+        '| isResumingOwnSession =', !!isResumingOwnSession,
+        '| activeHabitIdRef =', activeHabitIdRef.current
+      );
+
+      if (!isResumingOwnSession) {
+        // Fresh start (not resuming our own paused session) — make sure we're
+        // not about to silently kill and overwrite a different habit's timer
+        // that's still active in the background. getValidActiveTimerSession
+        // auto-clears (and returns null for) a session whose habit no longer
+        // exists, so an orphaned record can never block a new start.
+        const existingSession = await getValidActiveTimerSession();
+        console.log(
+          '[FORGE] startTimer: existingSession =',
+          existingSession ? existingSession.habitId : null
+        );
+        if (existingSession && existingSession.habitId !== habit.id) {
+          console.log(
+            '[FORGE] startTimer: BLOCKED — another habit\'s session is active:',
+            existingSession.habitId
+          );
+          Alert.alert(t('timer.anotherActiveTitle'), t('timer.anotherActiveMsg'));
+          return;
+        }
+      }
+
+      setIsRunning(true);
+      const now = Date.now();
+      startAtRef.current = now - localElapsed * 1000;
+      activeHabitIdRef.current = habit.id;
+
+      if (isResumingOwnSession && pausedAtRef.current && endDateRef.current) {
+        // Resuming from a genuine pause — shift endDate forward by the paused
+        // duration so the displayed remaining time doesn't jump (see Step 3 report).
+        const pausedDurationMs = now - pausedAtRef.current.getTime();
+        const newEndDate = new Date(endDateRef.current.getTime() + pausedDurationMs);
+        endDateRef.current = newEndDate;
+        pausedAtRef.current = null;
+        console.log('[FORGE] startTimer: RESUME branch — calling resumeHabitTimerActivity, newEndDate =', newEndDate.toISOString());
+        resumeHabitTimerActivity({
+          habitName: habit.title,
+          habitIcon: habit.icon ?? '⏱',
+          habitColor: habit.color,
+          startDate: new Date(startAtRef.current),
+          endDate: newEndDate,
+        });
+        console.log('[FORGE] startTimer: resumeHabitTimerActivity call returned (back in TimerModal)');
+        saveActiveTimerSession({
+          habitId: habit.id,
+          date,
+          startedAt: startAtRef.current,
+          endDate: newEndDate.getTime(),
+          goalSeconds,
+          isPaused: false,
+          pausedAt: null,
+        }).catch((e) => console.warn('[FORGE] startTimer: saveActiveTimerSession threw —', e));
+      } else {
+        // Fresh start (first start, or restarting after a full cancel/reset).
+        const startDate = new Date(startAtRef.current);
+        const endDate = new Date(startAtRef.current + goalSeconds * 1000);
+        endDateRef.current = endDate;
+        console.log(
+          '[FORGE] startTimer: FRESH START branch — about to call startHabitTimerActivity',
+          'typeof startHabitTimerActivity =', typeof startHabitTimerActivity,
+          'startDate =', startDate.toISOString(),
+          'endDate =', endDate.toISOString()
+        );
+        startHabitTimerActivity({
+          habitName: habit.title,
+          habitIcon: habit.icon ?? '⏱',
+          habitColor: habit.color,
+          startDate,
+          endDate,
+        });
+        console.log('[FORGE] startTimer: startHabitTimerActivity call returned (back in TimerModal)');
+        saveActiveTimerSession({
+          habitId: habit.id,
+          date,
+          startedAt: startAtRef.current,
+          endDate: endDate.getTime(),
+          goalSeconds,
+          isPaused: false,
+          pausedAt: null,
+        }).catch((e) => console.warn('[FORGE] startTimer: saveActiveTimerSession threw —', e));
+      }
+    } catch (e) {
+      console.warn('[FORGE] startTimer: UNCAUGHT ERROR in handler —', e);
+      throw e;
     }
+
     intervalRef.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startAtRef.current) / 1000);
       setLocalElapsed(elapsed);
-      if (activityIdRef.current) {
-        updateLiveActivity(activityIdRef.current, elapsed, true);
-      }
     }, 1000);
   };
 
-  const stopTimer = () => {
+  // The actual "Stop timer" button — pause with intent to resume later.
+  const pauseTimer = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setIsRunning(false);
-    if (activityIdRef.current) {
-      updateLiveActivity(activityIdRef.current, localElapsed, false);
+    const now = new Date();
+    pausedAtRef.current = now;
+    if (habit && endDateRef.current) {
+      pauseHabitTimerActivity(
+        {
+          habitName: habit.title,
+          habitIcon: habit.icon ?? '⏱',
+          habitColor: habit.color,
+          startDate: new Date(startAtRef.current),
+          endDate: endDateRef.current,
+        },
+        now
+      );
+      saveActiveTimerSession({
+        habitId: habit.id,
+        date,
+        startedAt: startAtRef.current,
+        endDate: endDateRef.current.getTime(),
+        goalSeconds,
+        isPaused: true,
+        pausedAt: now.getTime(),
+      }).catch(() => {});
     }
   };
 
+  // Used by completion, reset, and manual decrement — this timer session is
+  // over (as opposed to pauseTimer, which expects a later resume).
+  const cancelTimer = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    setIsRunning(false);
+    endHabitTimerActivity();
+    endDateRef.current = null;
+    pausedAtRef.current = null;
+    activeHabitIdRef.current = null;
+    clearActiveTimerSession().catch(() => {});
+  };
+
+  // Closing the modal only hides the UI — it does not cancel the timer. A
+  // running/paused session (and its Live Activity) keeps going in the
+  // background; reopening the modal for this habit reconstructs state from
+  // it (see the reconciliation effect above).
   const handleClose = () => {
-    if (activityIdRef.current) {
-      endLiveActivity(activityIdRef.current);
-      activityIdRef.current = null;
-    }
-    stopTimer();
     onElapsedChange(localElapsed);
     onClose();
   };
@@ -236,7 +437,7 @@ export function TimerModal({ visible, habit, elapsed, date, onClose, onElapsedCh
   // Auto-stop when goal reached — must stay before the early return (Rules of Hooks)
   useEffect(() => {
     if (isComplete && isRunning) {
-      stopTimer();
+      cancelTimer();
       onElapsedChange(goalSeconds);
     }
   }, [isComplete, isRunning]);
@@ -250,20 +451,20 @@ export function TimerModal({ visible, habit, elapsed, date, onClose, onElapsedCh
   };
 
   const handleCompleteAll = () => {
-    stopTimer();
+    cancelTimer();
     setLocalElapsed(goalSeconds);
     onElapsedChange(goalSeconds);
   };
 
   const handleReset = () => {
-    stopTimer();
+    cancelTimer();
     setLocalElapsed(0);
     onElapsedChange(0);
   };
 
   const handleDecrement = () => {
     const next = Math.max(localElapsed - stepSeconds, 0);
-    stopTimer();
+    cancelTimer();
     setLocalElapsed(next);
     onElapsedChange(next);
   };
@@ -349,7 +550,7 @@ export function TimerModal({ visible, habit, elapsed, date, onClose, onElapsedCh
 
           {/* Start / Stop timer */}
           <Pressable
-            onPress={isRunning ? stopTimer : startTimer}
+            onPress={isRunning ? pauseTimer : startTimer}
             style={[
               tm.startBtn,
               { backgroundColor: isRunning ? '#FF3B30' : habit.color },

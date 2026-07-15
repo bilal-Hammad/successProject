@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { migrateStorageKey } from '../utils/migrateStorageKey';
 
-const KEY = '@momentum/settings';
+const KEY = '@forge/settings';
+const KEY_LEGACY = '@momentum/settings';
 
 export const ACCENT_COLORS = [
   '#F05A7E', // coral pink (brand default)
@@ -88,7 +90,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   hydrate: async () => {
     try {
-      const raw = await AsyncStorage.getItem(KEY);
+      const raw = await migrateStorageKey(KEY_LEGACY, KEY);
       if (raw) {
         set({ ...DEFAULTS, ...(JSON.parse(raw) as Partial<Settings>), hydrated: true });
       } else {

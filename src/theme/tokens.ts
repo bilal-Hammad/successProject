@@ -1,5 +1,5 @@
 /**
- * Momentum — Design Token Definitions
+ * Forge — Design Token Definitions
  *
  * All colors are expressed in HSL so the palette is harmonious and
  * easy to adjust (shifting one hue value moves the whole scale).

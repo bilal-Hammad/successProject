@@ -52,12 +52,14 @@ class AppErrorBoundary extends Component<
 // Keep the splash visible until the app is fully ready.
 // Must be called before any component renders.
 SplashScreen.preventAutoHideAsync();
+import { AppState } from 'react-native';
 import { LanguageProvider, useLanguage } from '../src/i18n/LanguageContext';
 import {
   requestNotificationPermission,
   getNotificationPermissionStatus,
   scheduleAllReminders,
 } from '../src/notifications/reminders';
+import { reconcileActiveTimerSession } from '../src/data/activeTimerSession';
 import { useHabitStore } from '../src/store/useHabitStore';
 import { useMoodStore } from '../src/store/useMoodStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
@@ -115,6 +117,17 @@ function RootLayoutInner() {
     return unsubscribeAuth;
   }, []);
 
+  // Re-check on every foreground transition too, not just cold launch — a
+  // habit timer can finish while the app is merely backgrounded as well.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        reconcileActiveTimerSession().catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     // 1.5-second safety: splash always clears even if hydration hangs.
     // AnimatedSplash also has its own SAFE_EXIT_MS guard.
@@ -127,6 +140,12 @@ function RootLayoutInner() {
       .then(async () => {
         clearTimeout(safety);
         setHydrated(true);
+
+        // If a habit timer's Live Activity finished while the app wasn't open
+        // to see it, finalize that completion now that habits/completions are
+        // loaded. Safe to run on every launch — a no-op if there's no session
+        // or it isn't due yet.
+        reconcileActiveTimerSession().catch(() => {});
 
         const { notificationsEnabled } = useSettingsStore.getState();
         if (!notificationsEnabled) return;

@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Habit } from '../models/types';
+import { migrateStorageKey } from '../utils/migrateStorageKey';
 
 // expo-calendar lazy-loaded to avoid crashing in Expo Go.
 let Cal: typeof import('expo-calendar') | null = null;
@@ -11,8 +12,20 @@ try {
 }
 
 const CALENDAR_TITLE = 'Forge Habits';
-const CALENDAR_KEY = '@momentum/forgeCalendarId';
-const REMINDER_LIST_KEY = '@momentum/forgeReminderListId';
+const CALENDAR_KEY = '@forge/forgeCalendarId';
+const CALENDAR_KEY_LEGACY = '@momentum/forgeCalendarId';
+const REMINDER_LIST_KEY = '@forge/forgeReminderListId';
+const REMINDER_LIST_KEY_LEGACY = '@momentum/forgeReminderListId';
+
+let calendarKeysMigrated = false;
+async function ensureCalendarKeysMigrated(): Promise<void> {
+  if (calendarKeysMigrated) return;
+  await Promise.all([
+    migrateStorageKey(CALENDAR_KEY_LEGACY, CALENDAR_KEY),
+    migrateStorageKey(REMINDER_LIST_KEY_LEGACY, REMINDER_LIST_KEY),
+  ]);
+  calendarKeysMigrated = true;
+}
 
 export async function requestCalendarPermission(): Promise<boolean> {
   if (!Cal) return false;
@@ -37,6 +50,7 @@ export async function requestRemindersPermission(): Promise<boolean> {
 async function getOrCreateForgeCalendar(): Promise<string | null> {
   if (!Cal) return null;
   try {
+    await ensureCalendarKeysMigrated();
     const cached = await AsyncStorage.getItem(CALENDAR_KEY).catch(() => null);
     if (cached) {
       const all = await Cal.getCalendarsAsync(Cal.EntityTypes.EVENT);
@@ -80,6 +94,7 @@ async function getOrCreateForgeCalendar(): Promise<string | null> {
 async function getOrCreateForgeReminderList(): Promise<string | null> {
   if (!Cal) return null;
   try {
+    await ensureCalendarKeysMigrated();
     const cached = await AsyncStorage.getItem(REMINDER_LIST_KEY).catch(() => null);
     if (cached) {
       const all = await Cal.getCalendarsAsync(Cal.EntityTypes.REMINDER);
