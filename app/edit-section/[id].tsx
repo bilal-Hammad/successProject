@@ -21,7 +21,7 @@ import {
 import type { HabitType } from '../../src/models/types';
 
 const PRESET_COLORS = [
-  '#9C27B0', '#FF9800', '#4CAF50', '#00BCD4',
+  '#9C27B0', '#FF9800', '#A2FA4E', '#00BCD4',
   '#2196F3', '#E91E63', '#EF5350', '#795548',
 ];
 

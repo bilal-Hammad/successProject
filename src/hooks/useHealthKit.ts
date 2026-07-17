@@ -11,6 +11,15 @@ export function useHealthKitSync(
   logCount: LogCount,
 ) {
   const lastSyncRef = useRef(0);
+  // HealthKit types we've already requested authorization for this session.
+  // requestAuthorization must only be called once per type — calling it again
+  // on every sync (even for already-granted types) was the actual bug: it isn't
+  // wrapped in try/catch, and a rejected repeat call would throw synchronously
+  // here, aborting syncAll() before it ever reached the reads below. Since every
+  // subsequent sync hit this same line, that's why syncing only ever worked once,
+  // at add-time — never again afterward. Tracking already-initialized types here
+  // means only genuinely new health-linked habits trigger a fresh request.
+  const initializedTypesRef = useRef<Set<string>>(new Set());
 
   const syncAll = async () => {
     if (!isHealthKitAvailable()) return;
@@ -25,9 +34,17 @@ export function useHealthKitSync(
 
     console.log('[FORGE] HealthKit: syncing', linked.length, 'linked habits for', date);
 
-    // initHealthKit must be called before any reads. It shows the permission sheet
-    // on first launch and is a no-op (fast) for subsequent calls.
-    await initForHabits(linked.map((h) => h.healthKitType!));
+    const newTypes = linked
+      .map((h) => h.healthKitType!)
+      .filter((hkType) => !initializedTypesRef.current.has(hkType));
+    if (newTypes.length > 0) {
+      try {
+        await initForHabits(newTypes);
+        newTypes.forEach((hkType) => initializedTypesRef.current.add(hkType));
+      } catch (e) {
+        console.log('[FORGE] HealthKit: initForHabits threw —', e);
+      }
+    }
 
     await Promise.all(
       linked.map(async (habit) => {
@@ -46,16 +63,33 @@ export function useHealthKitSync(
     console.log('[FORGE] HealthKit: sync complete');
   };
 
-  // Sync on mount
+  // Always-fresh reference to the latest syncAll closure (current habits/date/
+  // logCount), so the foreground listener and the backstop interval below never
+  // need to be torn down and recreated just to avoid a stale closure.
+  const syncAllRef = useRef(syncAll);
+  syncAllRef.current = syncAll;
+
+  // Sync on mount / date change
   useEffect(() => {
-    syncAll();
+    syncAllRef.current();
   }, [date]);
 
   // Sync when app comes to foreground
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') syncAll();
+      if (state === 'active') syncAllRef.current();
     });
     return () => sub.remove();
-  }, [habits, date]);
+  }, []);
+
+  // Continuous backstop: HealthKit data can change while this screen just sits
+  // open in the foreground the whole time (e.g. a workout finishes via Apple
+  // Watch without you ever backgrounding Forge) — no AppState transition fires
+  // in that case, so without this, updates would only ever appear after your
+  // next background/foreground cycle. Matches the internal 60s throttle, so
+  // ticks that land before that window are cheap no-ops.
+  useEffect(() => {
+    const id = setInterval(() => syncAllRef.current(), 60_000);
+    return () => clearInterval(id);
+  }, []);
 }

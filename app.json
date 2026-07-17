@@ -4,10 +4,7 @@
     "slug": "forge",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": [
-      "momentum",
-      "forge"
-    ],
+    "scheme": "forge",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/logo.png",
     "ios": {
@@ -20,7 +17,8 @@
         "NSHealthUpdateUsageDescription": "Forge updates your habit progress in Apple Health.",
         "NSCalendarsUsageDescription": "Forge Habits creates calendar entries for your habits so you can see them in Apple Calendar alongside your other events.",
         "NSCalendarsFullAccessUsageDescription": "Forge Habits creates and manages calendar entries for your habits so you can see them in Apple Calendar alongside your other events.",
-        "NSRemindersUsageDescription": "Forge Habits creates reminders for your habits so they appear in the Apple Reminders app."
+        "NSRemindersUsageDescription": "Forge Habits creates reminders for your habits so they appear in the Apple Reminders app.",
+        "NSRemindersFullAccessUsageDescription": "Forge Habits creates and manages reminders for your habits so they appear in the Apple Reminders app."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,

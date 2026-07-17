@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CounterModal } from '../../src/components/CounterModal';
 import { MoodSelector } from '../../src/components/MoodSelector';
-import { EmptyState } from '../../src/components/EmptyState';
+import { AddHabitRow } from '../../src/components/AddHabitRow';
 import { GoodHabitCard, isTimeUnit } from '../../src/components/GoodHabitCard';
 import { TimerModal } from '../../src/components/TimerModal';
 import { TodoHabitCard } from '../../src/components/TodoHabitCard';
@@ -30,7 +30,6 @@ import { useHabitStore } from '../../src/store/useHabitStore';
 import { useMoodStore } from '../../src/store/useMoodStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { rescheduleAfterCompletion } from '../../src/notifications/reminders';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -62,7 +61,7 @@ export default function TodayScreen() {
   const theme = useTheme();
   const { t } = useLanguage();
   const { habits, completions, toggleCompletion, logCount, saveHabit } = useHabitStore();
-  const { enableFutureDates, weekStartsOn, dayStartsAt, notificationsEnabled, defaultReminderSchedule } = useSettingsStore();
+  const { enableFutureDates, weekStartsOn, dayStartsAt, notificationsEnabled } = useSettingsStore();
   const { moods, logMoodValue, getMood, getMoodValue } = useMoodStore();
 
   const todayStr = todayString(dayStartsAt);
@@ -125,20 +124,6 @@ export default function TodayScreen() {
     ? getHabitCount(timerHabitId, completions, selectedDate) * 60
     : 0;
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  // Non-blocking reschedule after a habit reaches completion.
-  // Only fires for today (completing a past date shouldn't shift future reminders),
-  // only when notifications are enabled, and only when the habit has remindMe set.
-  const fireReschedule = (habit: typeof habits[0], date: string) => {
-    if (!notificationsEnabled || !habit.remindMe || date !== todayStr) return;
-    rescheduleAfterCompletion(habit, defaultReminderSchedule)
-      .then(({ reminderTime, notificationIds }) => {
-        saveHabit({ ...habit, reminderTime, notificationIds: notificationIds.length > 0 ? notificationIds : undefined });
-      })
-      .catch(() => {});
-  };
-
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleDayPress = (dateStr: string, day: dayjs.Dayjs) => {
@@ -176,7 +161,6 @@ export default function TodayScreen() {
     logCount(habitId, selectedDate, next);
     if (next >= goal) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      fireReschedule(habit, selectedDate);
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -194,7 +178,6 @@ export default function TodayScreen() {
         logCount(habitId, selectedDate, todayCount + 1);
         if (weekCount + 1 >= habit.weeklyTarget) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          fireReschedule(habit, selectedDate);
         } else {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
@@ -205,7 +188,6 @@ export default function TodayScreen() {
         logCount(habitId, selectedDate, current + 1);
         if (current + 1 >= habit.dailyTarget) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          fireReschedule(habit, selectedDate);
         } else {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
@@ -215,7 +197,6 @@ export default function TodayScreen() {
       toggleCompletion(habitId, selectedDate);
       if (!wasDone) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        fireReschedule(habit, selectedDate);
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
@@ -243,7 +224,6 @@ export default function TodayScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        fireReschedule(habit, selectedDate);
       }
     }
   };
@@ -259,7 +239,6 @@ export default function TodayScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        fireReschedule(habit, selectedDate);
       }
     } else {
       const current = getHabitCount(habitId, completions, selectedDate);
@@ -268,7 +247,6 @@ export default function TodayScreen() {
       logCount(habitId, selectedDate, next);
       if (next >= habit.dailyTarget) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        fireReschedule(habit, selectedDate);
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
@@ -343,16 +321,7 @@ export default function TodayScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: 120, paddingHorizontal: theme.spacing.md }]}
         showsVerticalScrollIndicator={false}
       >
-        {sortedHabits.length === 0 ? (
-          <EmptyState
-            icon="🌱"
-            title={t('today.emptyTitle')}
-            body={t('today.emptyBody')}
-            actionLabel={t('today.browseTemplates')}
-            actionHref="/templates"
-          />
-        ) : (
-          <>
+        <>
             {sortedHabits.map((habit) => {
               const done = isHabitDone(habit, completions, selectedDate, weekStartsOn);
               const count = habit.weeklyTarget
@@ -426,8 +395,9 @@ export default function TodayScreen() {
                 {t('today.allDone')}
               </Text>
             )}
-          </>
-        )}
+
+            <AddHabitRow />
+        </>
       </ScrollView>
 
       {/* Mood Selector */}

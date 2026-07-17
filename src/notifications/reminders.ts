@@ -24,6 +24,35 @@ try {
 // iOS hard limit is 64; leave headroom for other app notifications.
 const MAX_NOTIFICATIONS = 60;
 
+// ─── Interactive notification actions (counting/non-binary habits only) ──────
+// Category must be registered before any notification using it is scheduled.
+export const HABIT_NOTIFICATION_CATEGORY = 'forge-counting-habit';
+export const ACTION_COMPLETE = 'complete';
+export const ACTION_INCREMENT = 'increment';
+export const ACTION_SKIP = 'skip';
+
+N?.setNotificationCategoryAsync(HABIT_NOTIFICATION_CATEGORY, [
+  // "Mark as Completed" matches Apple's own Reminders-app wording for this exact action.
+  { identifier: ACTION_COMPLETE, buttonTitle: 'Mark as Completed', options: { opensAppToForeground: false } },
+  { identifier: ACTION_INCREMENT, buttonTitle: '+1', options: { opensAppToForeground: false } },
+  { identifier: ACTION_SKIP, buttonTitle: 'Skip', options: { opensAppToForeground: false, isDestructive: true } },
+]).catch(() => {});
+
+/**
+ * Thin wrapper so callers (app/_layout.tsx) never need to import expo-notifications
+ * directly or handle the Expo Go/no-native-module case themselves. Deliberately has
+ * no dependency on useHabitStore — the actual action handling (logCount/skipHabit)
+ * lives in the caller, to avoid a repeat of the circular-import crash documented in
+ * useHabitStore.ts's deleteHabit (that one was reminders.ts-adjacent, not this exact
+ * pair, but the same failure mode applies to any two-way store/service import here).
+ */
+export function addNotificationResponseListener(
+  handler: (response: import('expo-notifications').NotificationResponse) => void,
+): { remove: () => void } {
+  if (!N) return { remove: () => {} };
+  return N.addNotificationResponseReceivedListener(handler);
+}
+
 async function getLang(): Promise<Language> {
   const stored = await AsyncStorage.getItem('@app_language').catch(() => null);
   return (stored as Language) || 'en';
@@ -97,6 +126,100 @@ export async function cancelHabitReminder(habitId: string): Promise<void> {
 }
 
 /**
+ * Cancel only today's still-pending frequency-mode reminder slots for a habit
+ * (called when the goal is reached or the habit is skipped for today) — leaves
+ * tomorrow's slots (not yet scheduled) and any other habit's reminders untouched.
+ */
+export async function cancelTodaysFrequencyReminders(habitId: string, date: string): Promise<void> {
+  if (!N) return;
+  const dateStr = date.replace(/-/g, ''); // "YYYY-MM-DD" -> "YYYYMMDD"
+  const scheduled = await N.getAllScheduledNotificationsAsync().catch(() => []);
+  const ids = scheduled
+    .filter((n) => n.identifier.startsWith(`habit-${habitId}-freq-${dateStr}-`))
+    .map((n) => n.identifier);
+  for (const id of ids) {
+    await N.cancelScheduledNotificationAsync(id).catch(() => {});
+  }
+}
+
+// 9:00 PM — the end of the reminder window for frequency-mode habits. The
+// window's start is the habit's own reminderTime (reused, not a separate field).
+const FREQUENCY_WINDOW_END_HOUR = 21;
+
+function computeFrequencySlotsForToday(habit: Habit): dayjs.Dayjs[] {
+  const time = habit.reminderTime ? parseTime(habit.reminderTime) : { hour: DEFAULT_HOUR, minute: DEFAULT_MINUTE };
+  const today = dayjs().startOf('day');
+  const windowStart = today.hour(time.hour).minute(time.minute).second(0);
+  const windowEnd = today.hour(FREQUENCY_WINDOW_END_HOUR).minute(0).second(0);
+  if (!windowEnd.isAfter(windowStart)) return [windowStart];
+
+  const slots: dayjs.Dayjs[] = [];
+  if (habit.reminderFrequencyMode === 'interval' && habit.reminderIntervalHours) {
+    let cur = windowStart;
+    while (!cur.isAfter(windowEnd)) {
+      slots.push(cur);
+      cur = cur.add(habit.reminderIntervalHours, 'hour');
+    }
+  } else if (habit.reminderFrequencyMode === 'timesPerDay' && habit.reminderTimesPerDay) {
+    const n = habit.reminderTimesPerDay;
+    const totalMinutes = windowEnd.diff(windowStart, 'minute');
+    const stepMinutes = n > 1 ? totalMinutes / (n - 1) : 0;
+    for (let i = 0; i < n; i++) {
+      slots.push(windowStart.add(Math.round(stepMinutes * i), 'minute'));
+    }
+  }
+  return slots;
+}
+
+/**
+ * Schedules today's remaining frequency-mode reminder slots as one-off DATE
+ * triggers (not a recurring DAILY trigger — a recurring trigger can't be
+ * cancelled for just one day without also cancelling every future day, which
+ * is exactly what "stop once the goal is reached today" needs to do). Must be
+ * re-called daily (see app/_layout.tsx's reconciliation) to schedule the next
+ * day's slots.
+ */
+export async function scheduleFrequencyRemindersForToday(habit: Habit): Promise<string[]> {
+  if (!N || !Device.isDevice) return [];
+
+  const dateStr = dayjs().format('YYYYMMDD');
+  const now = new Date();
+  const slots = computeFrequencySlotsForToday(habit);
+  const { title, body } = await getNotifStrings(habit);
+  const content = {
+    title,
+    body,
+    data: { habitId: habit.id, date: dayjs().format('YYYY-MM-DD') },
+    categoryIdentifier: HABIT_NOTIFICATION_CATEGORY,
+  };
+
+  const used = await countScheduled();
+  const slotsAvailable = MAX_NOTIFICATIONS - used;
+  if (slotsAvailable <= 0) {
+    console.warn('[reminders] iOS notification limit reached — skipping frequency slots for', habit.id);
+    return [];
+  }
+
+  const scheduledIds: string[] = [];
+  for (let i = 0; i < slots.length; i++) {
+    if (scheduledIds.length >= slotsAvailable) {
+      console.warn('[reminders] slot limit reached mid-habit (frequency)', habit.id);
+      break;
+    }
+    const slotDate = slots[i].toDate();
+    if (slotDate <= now) continue; // don't schedule a slot whose time already passed today
+    const id = `habit-${habit.id}-freq-${dateStr}-${i}`;
+    await N.scheduleNotificationAsync({
+      identifier: id,
+      content,
+      trigger: { type: N.SchedulableTriggerInputTypes.DATE, date: slotDate },
+    }).catch((e) => console.warn('[reminders] frequency schedule failed', id, e));
+    scheduledIds.push(id);
+  }
+  return scheduledIds;
+}
+
+/**
  * Schedule reminders for a single habit based on its repeat mode.
  * Cancels any previously scheduled reminders for this habit first.
  * Returns the new notification identifiers so the caller can save them to the habit.
@@ -111,6 +234,13 @@ export async function scheduleHabitReminder(habit: Habit): Promise<string[]> {
   // Cancel first so we don't accumulate stale triggers.
   await cancelHabitReminders(habit.id);
 
+  // Frequency mode (counting habits only) replaces the single fixed-time
+  // reminder below entirely — the two are mutually exclusive by construction,
+  // since only one of these branches ever runs.
+  if (habit.reminderFrequencyMode) {
+    return scheduleFrequencyRemindersForToday(habit);
+  }
+
   // Check how many slots remain before we start scheduling.
   const used = await countScheduled();
   const slotsAvailable = MAX_NOTIFICATIONS - used;
@@ -120,7 +250,21 @@ export async function scheduleHabitReminder(habit: Habit): Promise<string[]> {
   }
 
   const { title, body } = await getNotifStrings(habit);
-  const content = { title, body, data: { habitId: habit.id } };
+  // Interactive actions (Mark as Completed / +1 / Skip) apply to counting
+  // habits only, per the feature request — binary habits' notifications are
+  // untouched (no categoryIdentifier, same as before this feature existed).
+  //
+  // data intentionally has no `date` field here: these triggers are DAILY/
+  // WEEKLY/recurring, firing on many different future days, so any date
+  // captured at scheduling time would go stale by the time it actually fires.
+  // The response handler computes "today" itself instead of trusting this.
+  const isCountingHabit = !!habit.dailyTarget;
+  const content = {
+    title,
+    body,
+    data: { habitId: habit.id },
+    ...(isCountingHabit ? { categoryIdentifier: HABIT_NOTIFICATION_CATEGORY } : {}),
+  };
 
   const time = habit.reminderTime ? parseTime(habit.reminderTime) : { hour: DEFAULT_HOUR, minute: DEFAULT_MINUTE };
 
@@ -231,27 +375,4 @@ export async function scheduleAllReminders(habits: Habit[]): Promise<void> {
  */
 export async function cancelAllReminders(): Promise<void> {
   await N?.cancelAllScheduledNotificationsAsync().catch(() => {});
-}
-
-/**
- * Update the stored reminderTime to now (HH:mm) and reschedule.
- * Used after a habit is completed in "automatic" reminder mode.
- * The caller must persist the returned reminderTime to the habit store.
- */
-export async function rescheduleAfterCompletion(
-  habit: Habit,
-  defaultSchedule: 'automatic' | 'custom',
-): Promise<{ reminderTime: string; notificationIds: string[] }> {
-  const now = new Date();
-  const reminderTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-  if (!habit.remindMe) return { reminderTime: habit.reminderTime ?? reminderTime, notificationIds: habit.notificationIds ?? [] };
-
-  // In automatic mode, update the reminder time to match the user's current completion time.
-  const updatedHabit: Habit = defaultSchedule === 'automatic'
-    ? { ...habit, reminderTime }
-    : habit;
-
-  const notificationIds = await scheduleHabitReminder(updatedHabit);
-  return { reminderTime: updatedHabit.reminderTime ?? reminderTime, notificationIds };
 }

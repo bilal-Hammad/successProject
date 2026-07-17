@@ -7,4 +7,5 @@ export interface HabitRepository {
   getCompletions(): Promise<Completion[]>;
   toggleCompletion(habitId: string, date: string): Promise<void>;
   logCount(habitId: string, date: string, count: number): Promise<void>;
+  skipHabit(habitId: string, date: string): Promise<void>;
 }

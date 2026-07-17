@@ -46,15 +46,6 @@ function IconHome({ color, size = 28 }: { color: string; size?: number }) {
   );
 }
 
-function IconPlus({ color = '#fff', size = 30 }: { color?: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path d="M12 5V19" stroke={color} strokeWidth={2.5} strokeLinecap="round" />
-      <Path d="M5 12H19" stroke={color} strokeWidth={2.5} strokeLinecap="round" />
-    </Svg>
-  );
-}
-
 function IconChart({ color, size = 28 }: { color: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -94,7 +85,6 @@ export function BottomNav() {
     pathname === '/' ? 0 :
     pathname === '/progress' ? 1 :
     pathname === '/profile' ? 2 : -1;
-  const isOnToday = pathname === '/';
 
   // In RTL flex layout slot 0 renders on the physical right, so mirror the x position
   const slotLeft = (i: number) =>
@@ -108,9 +98,6 @@ export function BottomNav() {
   const hlOpacity = useRef(
     new Animated.Value(activeIndex > 0 ? 1 : 0)
   ).current;
-
-  // Morph: 0 = home icon visible, 1 = plus icon visible
-  const morphAnim = useRef(new Animated.Value(isOnToday ? 1 : 0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -126,19 +113,8 @@ export function BottomNav() {
         duration: 180,
         useNativeDriver: false,
       }),
-      Animated.timing(morphAnim, {
-        toValue: isOnToday ? 1 : 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
     ]).start();
-  }, [activeIndex, isOnToday, isRTL]);
-
-  // Derived morph values
-  const homeOpacity = morphAnim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 0, 0] });
-  const plusOpacity = morphAnim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0, 0, 1] });
-  const homeScale  = morphAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] });
-  const plusScale  = morphAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] });
+  }, [activeIndex, isRTL]);
 
   // ── Icon colours ────────────────────────────────────────────────────────────
   const DIM = 'rgba(255,255,255,0.55)';
@@ -153,15 +129,6 @@ export function BottomNav() {
     if (PATHS.indexOf(path) === activeIndex) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.navigate(path);
-  };
-
-  const pressFirst = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (isOnToday) {
-      router.push('/templates');
-    } else {
-      router.navigate('/');
-    }
   };
 
   return (
@@ -191,16 +158,9 @@ export function BottomNav() {
             style={[s.highlight, { left: hlX, backgroundColor: 'rgba(255,255,255,0.13)', opacity: hlOpacity }]}
           />
 
-          {/* Slot 0: Home / Add */}
-          <Pressable style={s.tab} onPress={pressFirst}>
-            <View style={s.iconWrap}>
-              <Animated.View style={[s.iconLayer, { opacity: homeOpacity, transform: [{ scale: homeScale }] }]}>
-                <IconHome color={slot0Color} size={28} />
-              </Animated.View>
-              <Animated.View style={[s.iconLayer, { opacity: plusOpacity, transform: [{ scale: plusScale }] }]}>
-                <IconPlus color="#fff" size={30} />
-              </Animated.View>
-            </View>
+          {/* Slot 0: Home */}
+          <Pressable style={s.tab} onPress={() => pressSlot('/')}>
+            <IconHome color={slot0Color} size={28} />
           </Pressable>
 
           {/* Slot 1: Progress */}
@@ -262,22 +222,6 @@ const s = StyleSheet.create({
 
   tab: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  iconWrap: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

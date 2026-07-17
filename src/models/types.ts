@@ -31,8 +31,15 @@ export type Habit = {
   healthKitType?: string;  // HealthKit identifier for auto-sync
   intervalDays?: number;   // "every N days" mode: due when (date - startDate) % intervalDays === 0
   remindMe?: boolean;      // per-habit reminder toggle
+  reminderMode?: 'custom' | 'smart'; // custom time vs. computed from completion history (binary habits only)
   notificationIds?: string[];   // identifiers of scheduled expo-notifications
-  calendarEventIds?: string[];  // identifiers of created Apple Calendar/Reminder events
+  calendarEnabled?: boolean;    // per-habit "also add to Calendar" toggle
+  calendarEventIds?: string[];  // single recurring Calendar event ID (kept as array for back-compat)
+  remindersAppEnabled?: boolean; // per-habit "also add to Reminders app" toggle
+  reminderId?: string;           // single recurring Apple Reminders entry ID
+  reminderFrequencyMode?: 'interval' | 'timesPerDay'; // counting habits only; unset = single fixed-time reminder (default, unchanged behavior)
+  reminderIntervalHours?: number;  // reminderFrequencyMode === 'interval'
+  reminderTimesPerDay?: number;    // reminderFrequencyMode === 'timesPerDay'; must be <= dailyTarget
 };
 
 export type RepeatMode = 'daily' | 'specificDays' | 'timesPerWeek' | 'everyXDays';
@@ -42,6 +49,7 @@ export type Completion = {
   date: string; // "YYYY-MM-DD"
   completedAt: number;
   count: number; // 1 for binary habits; 0–N for counting habits
+  skipped?: boolean; // actively skipped today, distinct from "just not done yet" (count 0)
 };
 
 export type TemplatePack = {

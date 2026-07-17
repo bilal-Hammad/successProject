@@ -3,9 +3,9 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLanguage } from '../../src/i18n/LanguageContext';
-import { useAuthStore } from '../../src/store/useAuthStore';
-import { useTheme } from '../../src/theme/ThemeContext';
+import { useLanguage } from '../../../src/i18n/LanguageContext';
+import { useAuthStore } from '../../../src/store/useAuthStore';
+import { useTheme } from '../../../src/theme/ThemeContext';
 
 function SectionHeader({ label }: { label: string }) {
   const theme = useTheme();
@@ -83,23 +83,13 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView
       style={[styles.safe, { backgroundColor: theme.colors.background }]}
-      edges={['top']}
+      edges={['bottom']}
     >
-      {/* ── Fixed header bar ────────────────────────────────── */}
-      <View style={[styles.headerBar, { borderBottomColor: theme.colors.border }]}>
-        <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-          {t('tabs.profile')}
-        </Text>
-        <Pressable
-          onPress={() => router.push('/settings')}
-          hitSlop={10}
-          style={[styles.gearBtn, { backgroundColor: theme.colors.surfaceRaised }]}
-        >
-          <Text style={styles.gearIcon}>⚙️</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 120 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: 120 }]}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         {/* ── Brand header ───────────────────────────────────── */}
         <View style={styles.brand}>
           <Text style={styles.brandIcon}>🎯</Text>
@@ -188,25 +178,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-
-  // Fixed header bar (outside ScrollView)
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700' },
-  gearBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gearIcon: { fontSize: 17 },
 
   scroll: { paddingHorizontal: 20, paddingTop: 8 },
 

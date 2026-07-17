@@ -69,12 +69,24 @@ export class AsyncStorageRepository implements HabitRepository {
     if (count <= 0) {
       next = completions.filter((_, i) => i !== idx);
     } else if (idx >= 0) {
+      // Explicitly clears skipped rather than spreading it forward — logging
+      // real progress after a skip means the day is no longer "skipped."
       next = completions.map((c, i) =>
-        i === idx ? { ...c, count, completedAt: Date.now() } : c
+        i === idx ? { ...c, count, completedAt: Date.now(), skipped: false } : c
       );
     } else {
       next = [...completions, { habitId, date, completedAt: Date.now(), count }];
     }
+    await AsyncStorage.setItem(COMPLETIONS_KEY, JSON.stringify(next));
+  }
+
+  async skipHabit(habitId: string, date: string): Promise<void> {
+    const completions = await this.getCompletions();
+    const idx = completions.findIndex((c) => c.habitId === habitId && c.date === date);
+    const skippedEntry: Completion = { habitId, date, completedAt: Date.now(), count: 0, skipped: true };
+    const next = idx >= 0
+      ? completions.map((c, i) => (i === idx ? skippedEntry : c))
+      : [...completions, skippedEntry];
     await AsyncStorage.setItem(COMPLETIONS_KEY, JSON.stringify(next));
   }
 }

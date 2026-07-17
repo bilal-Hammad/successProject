@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
+import { forgeAnimationHeaderOptions } from '../src/theme/forgeAnimationHeaderOptions';
 
 class SplashErrorBoundary extends Component<
   { children: ReactNode; onError: () => void },
@@ -53,13 +54,21 @@ class AppErrorBoundary extends Component<
 // Must be called before any component renders.
 SplashScreen.preventAutoHideAsync();
 import { AppState } from 'react-native';
+import dayjs from 'dayjs';
 import { LanguageProvider, useLanguage } from '../src/i18n/LanguageContext';
 import {
   requestNotificationPermission,
   getNotificationPermissionStatus,
   scheduleAllReminders,
+  addNotificationResponseListener,
+  ACTION_COMPLETE,
+  ACTION_INCREMENT,
+  ACTION_SKIP,
 } from '../src/notifications/reminders';
+import { getHabitCount } from '../src/logic/completion';
 import { reconcileActiveTimerSession } from '../src/data/activeTimerSession';
+import { reconcileSmartReminders, reconcileFrequencyReminders } from '../src/data/reminderReconciliation';
+import { migrateGlobalCalendarToggle } from '../src/data/migrateReminderSettings';
 import { useHabitStore } from '../src/store/useHabitStore';
 import { useMoodStore } from '../src/store/useMoodStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
@@ -123,6 +132,37 @@ function RootLayoutInner() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         reconcileActiveTimerSession().catch(() => {});
+        reconcileSmartReminders().catch(() => {});
+        reconcileFrequencyReminders().catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Handle "Mark as Completed" / "+1" / "Skip" tapped from a counting habit's
+  // notification. Reuses the exact same logCount/getHabitCount clamp formula
+  // as the in-app counter button — no separate write path. actionIdentifier
+  // is undefined for a plain notification tap (not a custom action), so those
+  // fall through to the default no-op below.
+  useEffect(() => {
+    const sub = addNotificationResponseListener((response) => {
+      const habitId = response.notification.request.content.data?.habitId as string | undefined;
+      if (!habitId) return;
+
+      const today = dayjs().format('YYYY-MM-DD');
+      const { habits, completions, logCount, skipHabit } = useHabitStore.getState();
+      const habit = habits.find((h) => h.id === habitId);
+      if (!habit) return;
+      const goal = habit.dailyTarget ?? 1;
+
+      if (response.actionIdentifier === ACTION_COMPLETE) {
+        logCount(habitId, today, goal);
+      } else if (response.actionIdentifier === ACTION_INCREMENT) {
+        const current = getHabitCount(habitId, completions, today);
+        const step = habit.step ?? 1;
+        logCount(habitId, today, Math.min(current + step, goal));
+      } else if (response.actionIdentifier === ACTION_SKIP) {
+        skipHabit(habitId, today);
       }
     });
     return () => sub.remove();
@@ -145,7 +185,10 @@ function RootLayoutInner() {
         // to see it, finalize that completion now that habits/completions are
         // loaded. Safe to run on every launch — a no-op if there's no session
         // or it isn't due yet.
+        await migrateGlobalCalendarToggle().catch(() => {});
         reconcileActiveTimerSession().catch(() => {});
+        reconcileSmartReminders().catch(() => {});
+        reconcileFrequencyReminders().catch(() => {});
 
         const { notificationsEnabled } = useSettingsStore.getState();
         if (!notificationsEnabled) return;
@@ -213,7 +256,11 @@ function RootLayoutInner() {
         />
         <Stack.Screen
           name="settings"
-          options={{ title: t('nav.settings'), headerBackTitle: t('nav.back') }}
+          options={{
+            title: t('nav.settings'),
+            headerBackTitle: t('nav.back'),
+            ...forgeAnimationHeaderOptions(theme),
+          }}
         />
         <Stack.Screen
           name="settings-theme"

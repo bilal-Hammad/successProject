@@ -1,18 +1,17 @@
 import dayjs from 'dayjs';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { EmptyState } from '../../src/components/EmptyState';
-import { ScreenHeader } from '../../src/components/ScreenHeader';
-import { StreakChip } from '../../src/components/StreakChip';
-import { useLanguage } from '../../src/i18n/LanguageContext';
-import { resolveHabitTitle } from '../../src/i18n/translations';
-import { getHabitCount, isHabitDone } from '../../src/logic/completion';
-import { pointsForDate, totalPoints } from '../../src/logic/points';
-import { habitsForDate, todayString } from '../../src/logic/scheduling';
-import { currentStreak, longestStreak } from '../../src/logic/streaks';
-import { useHabitStore } from '../../src/store/useHabitStore';
-import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { useTheme } from '../../src/theme/ThemeContext';
+import { EmptyState } from '../../../src/components/EmptyState';
+import { StreakChip } from '../../../src/components/StreakChip';
+import { useLanguage } from '../../../src/i18n/LanguageContext';
+import { resolveHabitTitle } from '../../../src/i18n/translations';
+import { getHabitCount, isHabitDone } from '../../../src/logic/completion';
+import { pointsForDate, totalPoints } from '../../../src/logic/points';
+import { habitsForDate, todayString } from '../../../src/logic/scheduling';
+import { currentStreak, longestStreak } from '../../../src/logic/streaks';
+import { useHabitStore } from '../../../src/store/useHabitStore';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { useTheme } from '../../../src/theme/ThemeContext';
 
 function getWeekDays(weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6) {
   const today = dayjs();
@@ -40,9 +39,11 @@ export default function ProgressScreen() {
   const weekDays = getWeekDays(weekStartsOn);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-      <ScreenHeader title={t('progress.title')} subtitle={t('progress.subtitle')} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 120 }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: 120 }]}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         {activeHabits.length === 0 ? (
           <EmptyState
             icon="📈"
@@ -213,7 +214,7 @@ export default function ProgressScreen() {
 
 function StatCard({ label, value, icon, theme }: {
   label: string; value: string; icon: string;
-  theme: ReturnType<typeof import('../../src/theme/ThemeContext').useTheme>;
+  theme: ReturnType<typeof import('../../../src/theme/ThemeContext').useTheme>;
 }) {
   return (
     <View style={[statStyles.card, {

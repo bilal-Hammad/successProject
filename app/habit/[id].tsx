@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -17,7 +17,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLanguage } from '../../src/i18n/LanguageContext';
 import { resolveHabitTitle } from '../../src/i18n/translations';
 import { cancelHabitReminders, scheduleHabitReminder } from '../../src/notifications/reminders';
-import { syncHabitCalendarEvents, deleteHabitEvents } from '../../src/services/calendarService';
+import {
+  syncHabitCalendarEvent,
+  syncHabitReminder,
+  deleteHabitCalendarEvent,
+  deleteHabitReminder,
+  requestCalendarPermission,
+  requestRemindersPermission,
+} from '../../src/services/calendarService';
+import { computeSmartReminderTime } from '../../src/data/smartReminderTime';
 import { useHabitStore } from '../../src/store/useHabitStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -27,7 +35,7 @@ let DateTimePicker: React.ComponentType<any> | null = null;
 try { DateTimePicker = require('@react-native-community/datetimepicker').default; } catch {}
 
 const ICONS = ['⭐', '🎯', '💡', '🏆', '❤️', '🌿', '🎨', '🎵', '📌', '🔑', '🛠', '🌟'];
-const COLORS = ['#6C63FF', '#FF5722', '#4CAF50', '#2196F3', '#9C27B0', '#FF9800', '#E91E63', '#00BCD4'];
+const COLORS = ['#6C63FF', '#FF5722', '#A2FA4E', '#2196F3', '#9C27B0', '#FF9800', '#E91E63', '#00BCD4'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 function initRepeatMode(habit: Habit): RepeatMode {
@@ -42,8 +50,8 @@ export default function EditHabitScreen() {
   const theme = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
-  const { habits, saveHabit, deleteHabit } = useHabitStore();
-  const { weekStartsOn, defaultReminderSchedule, notificationsEnabled, calendarIntegrationEnabled, calendarEventType } = useSettingsStore();
+  const { habits, completions, saveHabit, deleteHabit } = useHabitStore();
+  const { weekStartsOn, notificationsEnabled } = useSettingsStore();
   const habit = habits.find((h) => h.id === id);
 
   const [title, setTitle] = useState(habit ? resolveHabitTitle(habit, t) : '');
@@ -58,6 +66,12 @@ export default function EditHabitScreen() {
   const [intervalDays, setIntervalDays] = useState(String(habit?.intervalDays ?? 2));
   const [reminder, setReminder] = useState(habit?.reminderTime ?? '');
   const [remindMe, setRemindMe] = useState(habit?.remindMe ?? false);
+  const [reminderMode, setReminderMode] = useState<'custom' | 'smart'>(habit?.reminderMode ?? 'custom');
+  const [remindersAppEnabled, setRemindersAppEnabled] = useState(habit?.remindersAppEnabled ?? false);
+  const [calendarEnabled, setCalendarEnabled] = useState(habit?.calendarEnabled ?? false);
+  const [reminderFrequencyMode, setReminderFrequencyMode] = useState<'interval' | 'timesPerDay' | null>(habit?.reminderFrequencyMode ?? null);
+  const [reminderIntervalHours, setReminderIntervalHours] = useState(habit?.reminderIntervalHours ?? 2);
+  const [reminderTimesPerDay, setReminderTimesPerDay] = useState(habit?.reminderTimesPerDay ?? 2);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [tempReminderDate, setTempReminderDate] = useState<Date>(() => {
     if (habit?.reminderTime) {
@@ -80,6 +94,51 @@ export default function EditHabitScreen() {
 
   const orderedDays = Array.from({ length: 7 }, (_, i) => (weekStartsOn + i) % 7);
 
+  // Uses live form state (isCounting), not the stored habit's dailyTarget, since
+  // the user may be toggling counting on/off right now in this edit form.
+  const isBinaryEligible = (habit.habitType === 'good' || habit.habitType === 'bad') && !isCounting;
+  const smartPreview = isBinaryEligible ? computeSmartReminderTime(habit, completions) : null;
+  // Matches the same isCountingNow formula used in handleSave — timesPerWeek
+  // habits can't be counting-type regardless of the isCounting toggle.
+  const isCountingHabitNow = repeatMode !== 'timesPerWeek' && isCounting;
+  const dailyTargetGoal = Math.max(1, parseInt(dailyTarget, 10) || 1);
+
+  const handleRemindersAppToggle = async (value: boolean) => {
+    console.log('[FORGE] (edit) handleRemindersAppToggle: called with value =', value);
+    if (value) {
+      const granted = await requestRemindersPermission();
+      console.log('[FORGE] (edit) handleRemindersAppToggle: requestRemindersPermission() =', granted);
+      if (!granted) {
+        Alert.alert(
+          t('settings.calendarIntegration'),
+          'Reminders access was denied. Please enable it in Settings → Privacy → Reminders.',
+        );
+        console.log('[FORGE] (edit) handleRemindersAppToggle: permission denied — leaving toggle off');
+        return;
+      }
+    }
+    console.log('[FORGE] (edit) handleRemindersAppToggle: calling setRemindersAppEnabled(', value, ')');
+    setRemindersAppEnabled(value);
+  };
+
+  useEffect(() => {
+    console.log('[FORGE] (edit) remindersAppEnabled state is now =', remindersAppEnabled);
+  }, [remindersAppEnabled]);
+
+  const handleCalendarToggle = async (value: boolean) => {
+    if (value) {
+      const granted = await requestCalendarPermission();
+      if (!granted) {
+        Alert.alert(
+          t('settings.calendarIntegration'),
+          'Calendar access was denied. Please enable it in Settings → Privacy → Calendars.',
+        );
+        return;
+      }
+    }
+    setCalendarEnabled(value);
+  };
+
   const toggleDay = (day: number) => {
     setDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
@@ -93,13 +152,28 @@ export default function EditHabitScreen() {
     t('repeat.summaryEveryXDays', { count: Math.max(2, parseInt(intervalDays, 10) || 2) });
 
   const handleSave = async () => {
+    console.log('[FORGE] (edit) ===== handleSave ENTRY ===== remindersAppEnabled =', remindersAppEnabled, '| calendarEnabled =', calendarEnabled, '| remindMe =', remindMe);
     const trimmed = title.trim();
-    if (!trimmed) { Alert.alert(t('form.nameRequired')); return; }
+    if (!trimmed) {
+      console.log('[FORGE] (edit) handleSave: empty title — bailing with alert');
+      Alert.alert(t('form.nameRequired'));
+      return;
+    }
     if (repeatMode === 'specificDays' && days.length === 0) {
-      Alert.alert(t('form.selectDayMsg')); return;
+      console.log('[FORGE] (edit) handleSave: no days selected — bailing with alert');
+      Alert.alert(t('form.selectDayMsg'));
+      return;
     }
 
-    const updated = {
+    try {
+    const isCountingNow = repeatMode !== 'timesPerWeek' && isCounting;
+    const effectiveReminderTime = notificationsEnabled && remindMe
+      ? (reminderMode === 'smart' && isBinaryEligible && smartPreview
+          ? smartPreview.time
+          : (reminder || undefined))
+      : undefined;
+
+    const updated: Habit = {
       ...habit,
       title: trimmed,
       translationKey: undefined,
@@ -109,29 +183,53 @@ export default function EditHabitScreen() {
       scheduleDays: repeatMode === 'everyXDays' ? [] : repeatMode === 'timesPerWeek' ? ALL_DAYS : days.length > 0 ? days : ALL_DAYS,
       weeklyTarget: repeatMode === 'timesPerWeek' ? Math.max(1, parseInt(weeklyTarget, 10) || 3) : undefined,
       intervalDays: repeatMode === 'everyXDays' ? Math.max(2, parseInt(intervalDays, 10) || 2) : undefined,
-      reminderTime: notificationsEnabled && remindMe && defaultReminderSchedule === 'custom' ? reminder || undefined : undefined,
+      reminderTime: effectiveReminderTime,
       remindMe: notificationsEnabled ? remindMe : false,
-      dailyTarget: repeatMode !== 'timesPerWeek' && isCounting ? Math.max(1, parseInt(dailyTarget, 10) || 1) : undefined,
-      unit: repeatMode !== 'timesPerWeek' && isCounting && unit.trim() ? unit.trim() : undefined,
+      reminderMode: notificationsEnabled && remindMe ? reminderMode : undefined,
+      remindersAppEnabled: notificationsEnabled && remindMe ? remindersAppEnabled : false,
+      calendarEnabled: notificationsEnabled && remindMe ? calendarEnabled : false,
+      reminderFrequencyMode: notificationsEnabled && remindMe && isCountingNow ? reminderFrequencyMode ?? undefined : undefined,
+      reminderIntervalHours: notificationsEnabled && remindMe && isCountingNow && reminderFrequencyMode === 'interval'
+        ? Math.min(reminderIntervalHours, dailyTargetGoal) : undefined,
+      reminderTimesPerDay: notificationsEnabled && remindMe && isCountingNow && reminderFrequencyMode === 'timesPerDay'
+        ? Math.min(reminderTimesPerDay, dailyTargetGoal) : undefined,
+      dailyTarget: isCountingNow ? Math.max(1, parseInt(dailyTarget, 10) || 1) : undefined,
+      unit: isCountingNow && unit.trim() ? unit.trim() : undefined,
     };
 
     await saveHabit(updated);
 
+    console.log(
+      '[FORGE] handleSave (edit): sync gates —',
+      'notificationsEnabled =', notificationsEnabled,
+      '| remindMe =', remindMe,
+      '| remindersAppEnabled =', remindersAppEnabled,
+      '| calendarEnabled =', calendarEnabled,
+      '| effectiveReminderTime =', effectiveReminderTime,
+    );
+
     // scheduleHabitReminder internally cancels old ones first — no need to call cancel separately.
-    const [notifIds, calIds] = await Promise.all([
+    const [notifIds, reminderId, calId] = await Promise.all([
       notificationsEnabled && remindMe ? scheduleHabitReminder(updated) : cancelHabitReminders(habit.id).then(() => [] as string[]),
-      syncHabitCalendarEvents(updated, calendarEventType, calendarIntegrationEnabled),
+      notificationsEnabled && remindMe && remindersAppEnabled
+        ? syncHabitReminder(updated, effectiveReminderTime!, true)
+        : syncHabitReminder(updated, effectiveReminderTime ?? '09:00', false),
+      notificationsEnabled && remindMe && calendarEnabled
+        ? syncHabitCalendarEvent(updated, effectiveReminderTime!, true)
+        : syncHabitCalendarEvent(updated, effectiveReminderTime ?? '09:00', false),
     ]);
     // Persist IDs so future edits/deletes can target them directly.
-    if (notifIds.length > 0 || calIds.length > 0 || habit.notificationIds || habit.calendarEventIds) {
-      await saveHabit({
-        ...updated,
-        notificationIds: notifIds.length > 0 ? notifIds : undefined,
-        calendarEventIds: calIds.length > 0 ? calIds : undefined,
-      });
-    }
+    await saveHabit({
+      ...updated,
+      notificationIds: notifIds.length > 0 ? notifIds : undefined,
+      reminderId,
+      calendarEventIds: calId ? [calId] : undefined,
+    });
 
     router.back();
+    } catch (e) {
+      console.warn('[FORGE] (edit) handleSave: THREW —', e instanceof Error ? e.message : e, e);
+    }
   };
 
   const handleDelete = () => {
@@ -143,7 +241,8 @@ export default function EditHabitScreen() {
         onPress: async () => {
           await Promise.all([
             cancelHabitReminders(habit.id),
-            deleteHabitEvents(habit.calendarEventIds ?? []),
+            habit.calendarEventIds?.[0] ? deleteHabitCalendarEvent(habit.calendarEventIds[0]) : Promise.resolve(),
+            habit.reminderId ? deleteHabitReminder(habit.reminderId) : Promise.resolve(),
           ]);
           await deleteHabit(habit.id);
           router.back();
@@ -303,7 +402,27 @@ export default function EditHabitScreen() {
                   thumbColor="#fff"
                 />
               </View>
-              {remindMe && defaultReminderSchedule === 'custom' && (
+              {remindMe && isBinaryEligible && (
+                <View style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.toggleLabel, { color: theme.colors.textPrimary }]}>{t('form.reminderSmartToggle')}</Text>
+                    {smartPreview && (
+                      <Text style={[styles.toggleHint, { color: theme.colors.textSecondary }]}>
+                        {smartPreview.isFallback
+                          ? t('form.reminderSmartFallback', { time: smartPreview.time })
+                          : t('form.reminderSmartPreview', { time: smartPreview.time, count: smartPreview.sampleSize })}
+                      </Text>
+                    )}
+                  </View>
+                  <Switch
+                    value={reminderMode === 'smart'}
+                    onValueChange={(v) => setReminderMode(v ? 'smart' : 'custom')}
+                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              )}
+              {remindMe && reminderMode === 'custom' && (
                 <Pressable
                   onPress={() => setShowTimePicker(true)}
                   style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}
@@ -312,6 +431,92 @@ export default function EditHabitScreen() {
                   <Text style={[styles.toggleHint, { color: theme.colors.textSecondary }]}>{reminder || '09:00'}</Text>
                   <Text style={{ color: theme.colors.textSecondary, marginLeft: 6, fontSize: 18 }}>›</Text>
                 </Pressable>
+              )}
+              {remindMe && isCountingHabitNow && (
+                <>
+                  <View style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.toggleLabel, { color: theme.colors.textPrimary }]}>{t('form.reminderFrequencyToggle')}</Text>
+                      <Text style={[styles.toggleHint, { color: theme.colors.textSecondary }]}>
+                        {t('form.reminderFrequencyHint', { goal: dailyTargetGoal })}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={reminderFrequencyMode !== null}
+                      onValueChange={(v) => setReminderFrequencyMode(v ? 'interval' : null)}
+                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                      thumbColor="#fff"
+                    />
+                  </View>
+                  {reminderFrequencyMode !== null && (
+                    <>
+                      <Pressable
+                        onPress={() => setReminderFrequencyMode('interval')}
+                        style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}
+                      >
+                        <Text style={[styles.toggleLabel, { color: reminderFrequencyMode === 'interval' ? theme.colors.primary : theme.colors.textPrimary, flex: 1 }]}>
+                          {t('form.reminderFrequencyInterval', { hours: reminderIntervalHours })}
+                        </Text>
+                        {reminderFrequencyMode === 'interval' && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Pressable onPress={() => setReminderIntervalHours((v) => Math.max(1, v - 1))} hitSlop={8}>
+                              <Text style={{ fontSize: 20, color: theme.colors.textSecondary }}>−</Text>
+                            </Pressable>
+                            <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, minWidth: 20, textAlign: 'center' }}>
+                              {reminderIntervalHours}
+                            </Text>
+                            <Pressable onPress={() => setReminderIntervalHours((v) => Math.min(dailyTargetGoal, v + 1))} hitSlop={8}>
+                              <Text style={{ fontSize: 20, color: theme.colors.textSecondary }}>+</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setReminderFrequencyMode('timesPerDay')}
+                        style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}
+                      >
+                        <Text style={[styles.toggleLabel, { color: reminderFrequencyMode === 'timesPerDay' ? theme.colors.primary : theme.colors.textPrimary, flex: 1 }]}>
+                          {t('form.reminderFrequencyTimesPerDay', { count: reminderTimesPerDay })}
+                        </Text>
+                        {reminderFrequencyMode === 'timesPerDay' && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Pressable onPress={() => setReminderTimesPerDay((v) => Math.max(1, v - 1))} hitSlop={8}>
+                              <Text style={{ fontSize: 20, color: theme.colors.textSecondary }}>−</Text>
+                            </Pressable>
+                            <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, minWidth: 20, textAlign: 'center' }}>
+                              {reminderTimesPerDay}
+                            </Text>
+                            <Pressable onPress={() => setReminderTimesPerDay((v) => Math.min(dailyTargetGoal, v + 1))} hitSlop={8}>
+                              <Text style={{ fontSize: 20, color: theme.colors.textSecondary }}>+</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </Pressable>
+                    </>
+                  )}
+                </>
+              )}
+              {remindMe && (
+                <>
+                  <View style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}>
+                    <Text style={[styles.toggleLabel, { color: theme.colors.textPrimary, flex: 1 }]}>{t('form.remindersAppToggle')}</Text>
+                    <Switch
+                      value={remindersAppEnabled}
+                      onValueChange={handleRemindersAppToggle}
+                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                      thumbColor="#fff"
+                    />
+                  </View>
+                  <View style={[styles.toggleRow, { borderColor: theme.colors.border, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, marginTop: 8 }]}>
+                    <Text style={[styles.toggleLabel, { color: theme.colors.textPrimary, flex: 1 }]}>{t('form.calendarToggle')}</Text>
+                    <Switch
+                      value={calendarEnabled}
+                      onValueChange={handleCalendarToggle}
+                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                      thumbColor="#fff"
+                    />
+                  </View>
+                </>
               )}
             </>
           )}

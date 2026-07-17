@@ -10,7 +10,7 @@ export const ACCENT_COLORS = [
   '#6C63FF', // purple
   '#2196F3', // blue
   '#00BCD4', // cyan
-  '#4CAF50', // green
+  '#A2FA4E', // green (Apple Fitness/Health "Exercise ring" neon lemon-lime)
   '#FF9800', // amber
   '#E91E63', // deep pink
   '#9C27B0', // violet
@@ -35,9 +35,6 @@ export const GRADIENT_PRESETS: { start: string; end: string }[] = [
 
 export type WeekStart = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 1=Mon … 6=Sat
 
-export type ReminderSchedule = 'automatic' | 'custom';
-export type CalendarEventType = 'allDay' | 'automatic' | 'reminderTime';
-
 type Settings = {
   accentColorIndex: number;
   customBgEnabled: boolean;
@@ -53,10 +50,6 @@ type Settings = {
   notificationsSound: string;
   // Notifications
   notificationsEnabled: boolean;
-  defaultReminderSchedule: ReminderSchedule;
-  // Calendar integration
-  calendarIntegrationEnabled: boolean;
-  calendarEventType: CalendarEventType;
 };
 
 const DEFAULTS: Settings = {
@@ -73,9 +66,6 @@ const DEFAULTS: Settings = {
   completionSound: 'Default',
   notificationsSound: 'Default',
   notificationsEnabled: false,
-  defaultReminderSchedule: 'automatic',
-  calendarIntegrationEnabled: false,
-  calendarEventType: 'allDay',
 };
 
 type SettingsStore = Settings & {
@@ -119,9 +109,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         completionSound: s.completionSound,
         notificationsSound: s.notificationsSound,
         notificationsEnabled: s.notificationsEnabled,
-        defaultReminderSchedule: s.defaultReminderSchedule,
-        calendarIntegrationEnabled: s.calendarIntegrationEnabled,
-        calendarEventType: s.calendarEventType,
       };
       await AsyncStorage.setItem(KEY, JSON.stringify(toSave));
     } catch {}

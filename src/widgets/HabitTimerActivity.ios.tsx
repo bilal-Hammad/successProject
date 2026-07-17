@@ -1,4 +1,5 @@
-import { Text, HStack, VStack } from '@expo/ui/swift-ui';
+import { Text, HStack, VStack, Spacer, Button } from '@expo/ui/swift-ui';
+import { buttonStyle, buttonBorderShape, tint } from '@expo/ui/swift-ui/modifiers';
 import { createLiveActivity, type LiveActivityLayout, type LiveActivityEnvironment, type LiveActivity } from 'expo-widgets';
 import type { HabitTimerActivityProps, HabitTimerSessionInput } from './HabitTimerActivity.types';
 
@@ -21,14 +22,57 @@ function habitTimerActivityLayout(
     />
   );
 
+  const isPaused = !!props.pausedAt;
+
+  // Matches Apple's own Timer Live Activity (Lock Screen banner + Dynamic Island
+  // expanded state): two always-visible circular icon buttons, not a press-and-hold
+  // reveal. Confirmed against a real device (iOS 26.5) and against WWDC23 "Design
+  // dynamic Live Activities," which names Timer's pause/cancel pair as the reference
+  // example for buttons that control "an essential part of the activity."
+  //
+  // `onPress` is deliberately omitted below. Inside a Live Activity layout, expo-widgets'
+  // native button view (ios/Widgets/Buttons.swift) never reads `onPress` — only `target`
+  // survives into the compiled widget, routed through a LiveActivityIntent
+  // (ios/Widgets/AppIntent.swift) whose entire body just broadcasts a notification. It
+  // does not call Activity.update() itself, unlike Apple's own Timer. Actually handling
+  // these taps (via addUserInteractionListener) is a separate, deliberately deferred step
+  // — this pass only matches the visual design.
+  const pauseResumeButton = (
+    <Button
+      systemImage={isPaused ? 'play.fill' : 'pause.fill'}
+      target={isPaused ? 'resume' : 'pause'}
+      modifiers={[buttonStyle('bordered'), buttonBorderShape('circle'), tint(props.habitColor)]}
+    />
+  );
+
+  const cancelButton = (
+    <Button
+      systemImage="xmark"
+      role="cancel"
+      target="cancel"
+      modifiers={[buttonStyle('bordered'), buttonBorderShape('circle'), tint('#8E8E93')]}
+    />
+  );
+
+  const controlsRow = (
+    <HStack spacing={8}>
+      {pauseResumeButton}
+      {cancelButton}
+    </HStack>
+  );
+
   return {
     banner: (
       <HStack spacing={12}>
-        <Text>{props.habitIcon}</Text>
+        {controlsRow}
         <VStack alignment="leading">
-          <Text>{props.habitName}</Text>
-          {countdown}
+          <HStack spacing={4}>
+            <Text>{props.habitIcon}</Text>
+            <Text>{props.habitName}</Text>
+          </HStack>
         </VStack>
+        <Spacer />
+        {countdown}
       </HStack>
     ),
     compactLeading: <Text>{props.habitIcon}</Text>,
@@ -36,7 +80,13 @@ function habitTimerActivityLayout(
     minimal: <Text>{props.habitIcon}</Text>,
     expandedLeading: <Text>{props.habitIcon}</Text>,
     expandedTrailing: <Text>{props.habitName}</Text>,
-    expandedBottom: countdown,
+    expandedBottom: (
+      <HStack spacing={12}>
+        {controlsRow}
+        <Spacer />
+        {countdown}
+      </HStack>
+    ),
   };
 }
 

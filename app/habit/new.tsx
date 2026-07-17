@@ -16,10 +16,16 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../../src/i18n/LanguageContext';
 import { scheduleHabitReminder } from '../../src/notifications/reminders';
-import { syncHabitCalendarEvents } from '../../src/services/calendarService';
+import {
+  syncHabitCalendarEvent,
+  syncHabitReminder,
+  requestCalendarPermission,
+  requestRemindersPermission,
+} from '../../src/services/calendarService';
+import { computeSmartReminderTime, isSmartReminderEligible } from '../../src/data/smartReminderTime';
 import { useHabitStore } from '../../src/store/useHabitStore';
 import { useTheme } from '../../src/theme/ThemeContext';
-import type { HabitType, RepeatMode } from '../../src/models/types';
+import type { Habit, HabitType, RepeatMode } from '../../src/models/types';
 import { generateId } from '../../src/utils/id';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
@@ -66,7 +72,7 @@ const UNIT_CATEGORIES: { nameKey: string; units: string[] }[] = [
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const HABIT_COLORS = [
-  '#4CAF50', '#2196F3', '#FF9800', '#795548', '#9C27B0',
+  '#A2FA4E', '#2196F3', '#FF9800', '#795548', '#9C27B0',
   '#009688', '#00BCD4', '#F44336', '#03A9F4', '#E91E63',
   '#3F51B5', '#FF5722', '#8BC34A', '#FFC107', '#607D8B',
   '#F05A7E', '#6C63FF', '#00897B', '#F57F17', '#37474F',
@@ -310,7 +316,7 @@ export default function NewHabitScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const saveHabit = useHabitStore((s) => s.saveHabit);
-  const { weekStartsOn, defaultReminderSchedule, notificationsEnabled, calendarIntegrationEnabled, calendarEventType } = useSettingsStore();
+  const { weekStartsOn, notificationsEnabled } = useSettingsStore();
   const params = useLocalSearchParams<{
     templateId?: string;
     title?: string;
@@ -347,7 +353,15 @@ export default function NewHabitScreen() {
   const [endDate, setEndDate] = useState<string | null>(null);
   const [calendarFor, setCalendarFor] = useState<'start' | 'end' | null>(null);
   const [remindMe, setRemindMe] = useState(false);
+  const [reminderMode, setReminderMode] = useState<'custom' | 'smart'>('custom');
   const [reminderTime, setReminderTime] = useState('09:00');
+  const [remindersAppEnabled, setRemindersAppEnabled] = useState(false);
+  const [calendarEnabled, setCalendarEnabled] = useState(false);
+  // Counting habits only — unset (null) means the single fixed-time reminder
+  // above, unchanged from before this feature existed.
+  const [reminderFrequencyMode, setReminderFrequencyMode] = useState<'interval' | 'timesPerDay' | null>(null);
+  const [reminderIntervalHours, setReminderIntervalHours] = useState(2);
+  const [reminderTimesPerDay, setReminderTimesPerDay] = useState(2);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [tempReminderDate, setTempReminderDate] = useState<Date>(() => {
     const d = new Date(); d.setHours(9, 0, 0, 0); return d;
@@ -388,8 +402,49 @@ const [showGoal, setShowGoal] = useState(false);
     repeatMode === 'timesPerWeek' ? t('repeat.summaryTimesPerWeek', { count: repeatTimesPerWeek }) :
     t('repeat.summaryEveryXDays', { count: repeatIntervalDays });
 
+  const isCountingHabit = habitType === 'track' || (habitType === 'todo' && goal > 1) || (habitType === 'good' && goal > 1);
+  const isBinaryEligible = (habitType === 'good' || habitType === 'bad') && !isCountingHabit;
+
   const toggleDay = (d: number) =>
     setRepeatDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
+
+  const handleRemindersAppToggle = async (value: boolean) => {
+    console.log('[FORGE] handleRemindersAppToggle: called with value =', value);
+    if (value) {
+      const granted = await requestRemindersPermission();
+      console.log('[FORGE] handleRemindersAppToggle: requestRemindersPermission() =', granted);
+      if (!granted) {
+        Alert.alert(
+          t('settings.calendarIntegration'),
+          'Reminders access was denied. Please enable it in Settings → Privacy → Reminders.',
+        );
+        console.log('[FORGE] handleRemindersAppToggle: permission denied — leaving toggle off');
+        return;
+      }
+    }
+    console.log('[FORGE] handleRemindersAppToggle: calling setRemindersAppEnabled(', value, ')');
+    setRemindersAppEnabled(value);
+  };
+
+  // Confirms the state genuinely updates after the toggle handler runs —
+  // not just that setRemindersAppEnabled was called.
+  useEffect(() => {
+    console.log('[FORGE] remindersAppEnabled state is now =', remindersAppEnabled);
+  }, [remindersAppEnabled]);
+
+  const handleCalendarToggle = async (value: boolean) => {
+    if (value) {
+      const granted = await requestCalendarPermission();
+      if (!granted) {
+        Alert.alert(
+          t('settings.calendarIntegration'),
+          'Calendar access was denied. Please enable it in Settings → Privacy → Calendars.',
+        );
+        return;
+      }
+    }
+    setCalendarEnabled(value);
+  };
 
   const adjustGoal = (delta: number) =>
     setTempGoalStr(String(Math.max(1, (parseInt(tempGoalStr || '1', 10) || 1) + delta)));
@@ -443,13 +498,27 @@ const [showGoal, setShowGoal] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (saving) return;
+    console.log('[FORGE] ===== handleSave ENTRY ===== remindersAppEnabled =', remindersAppEnabled, '| calendarEnabled =', calendarEnabled, '| remindMe =', remindMe);
+    if (saving) {
+      console.log('[FORGE] handleSave: already saving — bailing');
+      return;
+    }
     const trimmed = title.trim();
-    if (!trimmed) { Alert.alert(t('form.nameRequired'), t('form.nameRequiredMsg')); return; }
+    if (!trimmed) {
+      console.log('[FORGE] handleSave: empty title — bailing with alert');
+      Alert.alert(t('form.nameRequired'), t('form.nameRequiredMsg'));
+      return;
+    }
     setSaving(true);
-    const isCountingHabit = habitType === 'track' || (habitType === 'todo' && goal > 1) || (habitType === 'good' && goal > 1);
+    try {
     const habitId = generateId();
-    const newHabit = {
+    const createdAt = Date.now();
+    const effectiveReminderTime = notificationsEnabled && remindMe
+      ? (reminderMode === 'smart' && isBinaryEligible
+          ? computeSmartReminderTime({ id: habitId, createdAt } as Habit, []).time
+          : reminderTime)
+      : undefined;
+    const newHabit: Habit = {
       id: habitId,
       title: trimmed,
       icon,
@@ -462,7 +531,7 @@ const [showGoal, setShowGoal] = useState(false);
       dailyTarget: isCountingHabit ? goal : undefined,
       unit: isCountingHabit ? unit : undefined,
       step: isCountingHabit ? step : undefined,
-      createdAt: Date.now(),
+      createdAt,
       archived: false,
       description: description || undefined,
       habitType,
@@ -470,24 +539,51 @@ const [showGoal, setShowGoal] = useState(false);
       endDate: endsEnabled && endDate ? endDate : undefined,
       healthKitType: params.healthKitType,
       remindMe: notificationsEnabled ? remindMe : false,
-      reminderTime: notificationsEnabled && remindMe && defaultReminderSchedule === 'custom' ? reminderTime : undefined,
+      reminderMode: notificationsEnabled && remindMe ? reminderMode : undefined,
+      reminderTime: effectiveReminderTime,
+      remindersAppEnabled: notificationsEnabled && remindMe ? remindersAppEnabled : false,
+      calendarEnabled: notificationsEnabled && remindMe ? calendarEnabled : false,
+      reminderFrequencyMode: notificationsEnabled && remindMe && isCountingHabit ? reminderFrequencyMode ?? undefined : undefined,
+      reminderIntervalHours: notificationsEnabled && remindMe && isCountingHabit && reminderFrequencyMode === 'interval'
+        ? Math.min(reminderIntervalHours, goal) : undefined,
+      reminderTimesPerDay: notificationsEnabled && remindMe && isCountingHabit && reminderFrequencyMode === 'timesPerDay'
+        ? Math.min(reminderTimesPerDay, goal) : undefined,
     };
     await saveHabit(newHabit);
 
-    // Schedule notifications and calendar events, then save IDs back.
-    const [notifIds, calIds] = await Promise.all([
+    console.log(
+      '[FORGE] handleSave: sync gates —',
+      'notificationsEnabled =', notificationsEnabled,
+      '| remindMe =', remindMe,
+      '| remindersAppEnabled =', remindersAppEnabled,
+      '| calendarEnabled =', calendarEnabled,
+      '| effectiveReminderTime =', effectiveReminderTime,
+    );
+
+    // Schedule notifications, Reminders entry, and Calendar event, then save IDs back.
+    const [notifIds, reminderId, calId] = await Promise.all([
       notificationsEnabled && remindMe ? scheduleHabitReminder(newHabit) : Promise.resolve([] as string[]),
-      calendarIntegrationEnabled ? syncHabitCalendarEvents(newHabit, calendarEventType, true) : Promise.resolve([] as string[]),
+      notificationsEnabled && remindMe && remindersAppEnabled
+        ? syncHabitReminder(newHabit, effectiveReminderTime!, true)
+        : Promise.resolve(undefined),
+      notificationsEnabled && remindMe && calendarEnabled
+        ? syncHabitCalendarEvent(newHabit, effectiveReminderTime!, true)
+        : Promise.resolve(undefined),
     ]);
-    if (notifIds.length > 0 || calIds.length > 0) {
+    if (notifIds.length > 0 || reminderId || calId) {
       await saveHabit({
         ...newHabit,
         notificationIds: notifIds.length > 0 ? notifIds : undefined,
-        calendarEventIds: calIds.length > 0 ? calIds : undefined,
+        reminderId,
+        calendarEventIds: calId ? [calId] : undefined,
       });
     }
 
     router.navigate('/');
+    } catch (e) {
+      console.warn('[FORGE] handleSave: THREW —', e instanceof Error ? e.message : e, e);
+      setSaving(false);
+    }
   };
 
   const previewSubtitle = habitType === 'todo' ? t('form.previewTodo') : `${repeatLabel}, ${goal}`;
@@ -573,7 +669,22 @@ const [showGoal, setShowGoal] = useState(false);
                   />
                 }
               />
-              {remindMe && defaultReminderSchedule === 'custom' && (
+              {remindMe && isBinaryEligible && (
+                <Row
+                  icon="🧠"
+                  label={t('form.reminderSmartToggle')}
+                  hint={t('form.reminderSmartFallback', { time: reminderTime })}
+                  rightNode={
+                    <Switch
+                      value={reminderMode === 'smart'}
+                      onValueChange={(v) => setReminderMode(v ? 'smart' : 'custom')}
+                      trackColor={{ false: theme.colors.border, true: color }}
+                      thumbColor="#fff"
+                    />
+                  }
+                />
+              )}
+              {remindMe && reminderMode === 'custom' && (
                 <Row
                   icon="⏰"
                   label={t('form.reminderTimeLabel')}
@@ -590,6 +701,123 @@ const [showGoal, setShowGoal] = useState(false);
                     </View>
                   }
                 />
+              )}
+              {remindMe && isCountingHabit && (
+                <>
+                  <Row
+                    icon="🔁"
+                    label={t('form.reminderFrequencyToggle')}
+                    hint={t('form.reminderFrequencyHint', { goal })}
+                    rightNode={
+                      <Switch
+                        value={reminderFrequencyMode !== null}
+                        onValueChange={(v) => setReminderFrequencyMode(v ? 'interval' : null)}
+                        trackColor={{ false: theme.colors.border, true: color }}
+                        thumbColor="#fff"
+                      />
+                    }
+                  />
+                  {reminderFrequencyMode !== null && (
+                    <>
+                      <View style={[s.row, { paddingRight: 8 }]}>
+                        <Pressable
+                          onPress={() => setReminderFrequencyMode('interval')}
+                          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                        >
+                          <View style={[s.radio, { borderColor: reminderFrequencyMode === 'interval' ? color : theme.colors.textDisabled, backgroundColor: reminderFrequencyMode === 'interval' ? color : 'transparent' }]}>
+                            {reminderFrequencyMode === 'interval' && <Text style={s.radioCheck}>✓</Text>}
+                          </View>
+                          <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>
+                            {t('form.reminderFrequencyInterval', { hours: reminderIntervalHours })}
+                          </Text>
+                        </Pressable>
+                        {reminderFrequencyMode === 'interval' && (
+                          <View style={s.stepperWrap}>
+                            <View style={[s.stepperBox, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                              <Text style={[s.stepperInput, { color: theme.colors.textPrimary }]}>{reminderIntervalHours}</Text>
+                            </View>
+                            <View style={s.stepperBtns}>
+                              <Pressable
+                                onPress={() => setReminderIntervalHours((v) => Math.min(goal, v + 1))}
+                                style={[s.stepDot, { backgroundColor: color }]}
+                              >
+                                <Text style={s.stepDotText}>▲</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => setReminderIntervalHours((v) => Math.max(1, v - 1))}
+                                style={[s.stepDot, { backgroundColor: color }]}
+                              >
+                                <Text style={s.stepDotText}>▼</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                      <View style={[s.row, { paddingRight: 8 }]}>
+                        <Pressable
+                          onPress={() => setReminderFrequencyMode('timesPerDay')}
+                          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                        >
+                          <View style={[s.radio, { borderColor: reminderFrequencyMode === 'timesPerDay' ? color : theme.colors.textDisabled, backgroundColor: reminderFrequencyMode === 'timesPerDay' ? color : 'transparent' }]}>
+                            {reminderFrequencyMode === 'timesPerDay' && <Text style={s.radioCheck}>✓</Text>}
+                          </View>
+                          <Text style={[s.rowLabel, { color: theme.colors.textPrimary }]}>
+                            {t('form.reminderFrequencyTimesPerDay', { count: reminderTimesPerDay })}
+                          </Text>
+                        </Pressable>
+                        {reminderFrequencyMode === 'timesPerDay' && (
+                          <View style={s.stepperWrap}>
+                            <View style={[s.stepperBox, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                              <Text style={[s.stepperInput, { color: theme.colors.textPrimary }]}>{reminderTimesPerDay}</Text>
+                            </View>
+                            <View style={s.stepperBtns}>
+                              <Pressable
+                                onPress={() => setReminderTimesPerDay((v) => Math.min(goal, v + 1))}
+                                style={[s.stepDot, { backgroundColor: color }]}
+                              >
+                                <Text style={s.stepDotText}>▲</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => setReminderTimesPerDay((v) => Math.max(1, v - 1))}
+                                style={[s.stepDot, { backgroundColor: color }]}
+                              >
+                                <Text style={s.stepDotText}>▼</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    </>
+                  )}
+                </>
+              )}
+              {remindMe && (
+                <>
+                  <Row
+                    icon="✅"
+                    label={t('form.remindersAppToggle')}
+                    rightNode={
+                      <Switch
+                        value={remindersAppEnabled}
+                        onValueChange={handleRemindersAppToggle}
+                        trackColor={{ false: theme.colors.border, true: color }}
+                        thumbColor="#fff"
+                      />
+                    }
+                  />
+                  <Row
+                    icon="🗓"
+                    label={t('form.calendarToggle')}
+                    rightNode={
+                      <Switch
+                        value={calendarEnabled}
+                        onValueChange={handleCalendarToggle}
+                        trackColor={{ false: theme.colors.border, true: color }}
+                        thumbColor="#fff"
+                      />
+                    }
+                  />
+                </>
               )}
             </>
           )}
@@ -1121,6 +1349,11 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   stepDotText: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  radio: {
+    width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center', marginRight: 10,
+  },
+  radioCheck: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
   // Unit picker
   unitRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },

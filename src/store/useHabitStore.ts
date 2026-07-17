@@ -1,8 +1,14 @@
 import { create } from 'zustand';
+import dayjs from 'dayjs';
 import { AsyncStorageRepository } from '../data/asyncStorageRepository';
 import type { Completion, Habit } from '../models/types';
+import { cancelTodaysFrequencyReminders } from '../notifications/reminders';
 
 const repo = new AsyncStorageRepository();
+
+function isToday(date: string): boolean {
+  return date === dayjs().format('YYYY-MM-DD');
+}
 
 type HabitStore = {
   habits: Habit[];
@@ -13,9 +19,10 @@ type HabitStore = {
   deleteHabit: (id: string) => Promise<void>;
   toggleCompletion: (habitId: string, date: string) => Promise<void>;
   logCount: (habitId: string, date: string, count: number) => Promise<void>;
+  skipHabit: (habitId: string, date: string) => Promise<void>;
 };
 
-export const useHabitStore = create<HabitStore>((set) => ({
+export const useHabitStore = create<HabitStore>((set, get) => ({
   habits: [],
   completions: [],
   hydrated: false,
@@ -65,5 +72,27 @@ export const useHabitStore = create<HabitStore>((set) => ({
     await repo.logCount(habitId, date, count);
     const completions = await repo.getCompletions();
     set({ completions });
+
+    // Frequency-mode reminders are one-off, per-slot notifications for today
+    // only — once the goal is reached, stop nagging for the rest of the day.
+    // Only meaningful for today's date (editing a past day's count shouldn't
+    // touch today's still-pending reminders) and only for frequency-mode
+    // habits — a habit still on the single fixed-time reminder has no
+    // per-day-cancellable notification to cancel (see reminders.ts).
+    const habit = get().habits.find((h) => h.id === habitId);
+    if (habit?.reminderFrequencyMode && habit.dailyTarget && count >= habit.dailyTarget && isToday(date)) {
+      cancelTodaysFrequencyReminders(habitId, date).catch(() => {});
+    }
+  },
+
+  skipHabit: async (habitId, date) => {
+    await repo.skipHabit(habitId, date);
+    const completions = await repo.getCompletions();
+    set({ completions });
+
+    const habit = get().habits.find((h) => h.id === habitId);
+    if (habit?.reminderFrequencyMode && isToday(date)) {
+      cancelTodaysFrequencyReminders(habitId, date).catch(() => {});
+    }
   },
 }));
