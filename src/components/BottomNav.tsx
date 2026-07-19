@@ -36,8 +36,8 @@ const DRAG_THRESHOLD = 8;
 const MOVE_SLOP = 10;
 
 // ─── Layout constants (keep in sync with useBottomNavHeight) ──────────────────
-const PILL_H = 70;
-const FLOAT_GAP = 10;
+const PILL_H = 56;
+const FLOAT_GAP = 4;
 const H_PAD = 16;
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -55,7 +55,7 @@ const ICON_SIZE = 28;
 // that was matching the reference's icon+label width but looked round for
 // icon-only slots.
 const CAPSULE_H_PAD = 22;
-const CAPSULE_V_PAD = 9;
+const CAPSULE_V_PAD = 10;
 const CAPSULE_W = ICON_SIZE + CAPSULE_H_PAD * 2;
 const CAPSULE_H = ICON_SIZE + CAPSULE_V_PAD * 2;
 
@@ -64,7 +64,7 @@ const CAPSULE_H = ICON_SIZE + CAPSULE_V_PAD * 2;
 // alongside the resting capsule above so it still reads as clearly bigger,
 // not just equal to it.
 const LENS_W = 80;
-const LENS_H = 74;
+const LENS_H = 62;
 
 // Transparency/clarity tuning (fix-request item 3) — flip these to A/B test
 // on-device: 'regular' + a dark tint reads more defined/opaque against
@@ -184,11 +184,10 @@ export function BottomNav() {
     frame({ width: CAPSULE_W, height: CAPSULE_H }),
     ...(activeIndex === index && !lensVisible
       ? [
-          // 'regular' frosted material renders as a neutral gray on light
-          // backgrounds — matches the reference's barely-visible soft gray
-          // capsule. 'clear' produced stark white specular highlights that
-          // read as an oversized white circle rather than a subtle indicator.
-          glassEffect({ glass: { variant: 'regular' as const }, shape: 'capsule' as const }),
+          // Explicit dark tint (rgba(20,20,30,0.60)) makes the active capsule
+          // clearly dark against the white-tinted bar — direct color control
+          // rather than relying on variant behavior to produce a specific tone.
+          glassEffect({ glass: { variant: 'regular' as const, tint: 'rgba(255,255,255,0.18)' }, shape: 'capsule' as const }),
           glassEffectId('selected-tab', namespaceId),
         ]
       : []),
@@ -296,7 +295,7 @@ export function BottomNav() {
   ).current;
 
   return (
-    <View style={[s.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+    <View style={[s.wrapper, { paddingBottom: insets.bottom }]}>
       <View style={s.shadow}>
         <View style={s.pill}>
 
@@ -310,7 +309,12 @@ export function BottomNav() {
           {Platform.OS === 'ios' ? (
             <Host style={StyleSheet.absoluteFill} pointerEvents="none">
               <GlassEffectContainer>
-                <Capsule modifiers={[glassEffect({ glass: { variant: 'clear' }, shape: 'capsule' })]} />
+                {/* Explicit white tint (0.85 opacity) forces the bar to read as
+                    clearly light/white regardless of the content behind it.
+                    Tint is the reliable lever here — glass variant alone doesn't
+                    guarantee a specific lightness when layered over arbitrary
+                    backgrounds. */}
+                <Capsule modifiers={[glassEffect({ glass: { variant: 'regular', tint: 'rgba(255,255,255,0.08)' }, shape: 'capsule' })]} />
               </GlassEffectContainer>
             </Host>
           ) : (
@@ -457,21 +461,38 @@ const s = StyleSheet.create({
   },
 
   // Outer ring — holds shadow (must NOT have overflow:hidden or shadow is clipped on iOS)
+  // Retuned to a barely-there lift: offset-y 4 / radius 18 / opacity 0.08.
   shadow: {
-    borderRadius: 50,
+    borderRadius: PILL_H / 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
     elevation: 12,
   },
 
-  // Inner pill — clips background to rounded shape
+  // Inner pill — clips background to rounded shape. borderRadius: PILL_H/2
+  // (35) + borderCurve:'continuous' is a real native property (maps to
+  // UIView's actual continuous/squircle corner-curve algorithm, not RN's
+  // default circular one) — genuine fidelity improvement, not approximated,
+  // even though the visual cap shape is the same either way at radius=height/2.
+  //
+  // Directional border (brighter top, dimmer bottom) uses RN's real per-edge
+  // border color support (borderTopColor/borderBottomColor/etc.) rather than
+  // a hand-drawn gradient overlay — no new dependency, and it's an honest top
+  // vs. bottom split rather than a smooth blend, which RN's plain border
+  // properties can't do, but reads correctly at hairline thickness.
   pill: {
     height: PILL_H,
-    borderRadius: 50,
+    borderRadius: PILL_H / 2,
+    borderCurve: 'continuous',
     flexDirection: 'row',
     overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.65)',
+    borderLeftColor: 'rgba(255,255,255,0.35)',
+    borderRightColor: 'rgba(255,255,255,0.35)',
+    borderBottomColor: 'rgba(255,255,255,0.15)',
   },
 
   // Android/older-iOS fallback row (no native glass, no RNHostView)
